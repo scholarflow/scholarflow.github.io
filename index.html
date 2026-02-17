@@ -555,8 +555,12 @@
                 
                 <!-- Edit Mode Attachments -->
                 <div id="edit-attachments-container" class="border-t border-white/5 pt-4">
-                    <p class="text-[10px] uppercase opacity-50 mb-2">Attachments (Read Only in Edit Mode)</p>
+                    <p class="text-[10px] uppercase opacity-50 mb-2">Attachments</p>
                     <div id="edit-existing-attachments" class="flex flex-wrap gap-2 mb-2"></div>
+                    <label class="inline-flex items-center gap-2 text-xs bg-zinc-800 px-3 py-2 rounded-full cursor-pointer hover:bg-zinc-700 transition-colors">
+                        <span>+ Add attachment</span>
+                        <input type="file" class="hidden" onchange="handleEditFileSelect(this)">
+                    </label>
                 </div>
             </div>
         </section>
@@ -695,9 +699,10 @@
         let currentNoteComments = [];
         let unsubscribeComments = null;
         let replyToId = null; // ID of comment being replied to
+        let commentProfilesCache = {}; // uid -> latest public profile data
         
         // Report State
-        let activeReport = null; // { type: 'note' | 'profile', id: string, content: string }
+        let activeReport = null; // { type: 'note' | 'profile' | 'comment', id: string, noteId?: string, content: string }
 
         // Update Loader Message Helper
         const setBootStatus = (msg) => {
@@ -1096,54 +1101,76 @@
             // data = { displayName, photoURL, username }
             if (!currentUser) return;
             const uid = currentUser.uid;
-            
+
             setBootStatus("Syncing changes across app...");
-            const batch = writeBatch(db);
-            let count = 0;
-            const MAX_BATCH = 450; 
+
+            const updates = [];
+            const MAX_BATCH = 450;
+
+            const commitChunkedUpdates = async () => {
+                for (let i = 0; i < updates.length; i += MAX_BATCH) {
+                    const batch = writeBatch(db);
+                    updates.slice(i, i + MAX_BATCH).forEach(({ ref, payload }) => {
+                        batch.update(ref, payload);
+                    });
+                    await batch.commit();
+                }
+            };
 
             try {
-                // 1. Update Notes
+                // 1. Update shared notes authored by this user
                 const notesQuery = query(
                     collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'),
                     where('authorId', '==', uid)
                 );
                 const notesSnap = await getDocs(notesQuery);
-                notesSnap.forEach(doc => {
-                    if (count < MAX_BATCH) {
-                        batch.update(doc.ref, {
+
+                notesSnap.forEach(noteDoc => {
+                    updates.push({
+                        ref: noteDoc.ref,
+                        payload: {
                             author: data.displayName,
                             authorUsername: data.username
-                        });
-                        count++;
-                    }
+                        }
+                    });
                 });
 
-                // 2. Update Comments
-                const commentsQuery = query(
-                    collectionGroup(db, 'comments'), 
-                    where('authorId', '==', uid)
-                );
-                
-                const commentsSnap = await getDocs(commentsQuery);
-                commentsSnap.forEach(doc => {
-                    if (doc.ref.path.includes(appId) && count < MAX_BATCH) {
-                        batch.update(doc.ref, {
-                            authorName: data.displayName,
-                            authorAvatar: data.photoURL,
-                            authorUsername: data.username
-                        });
-                        count++;
-                    }
-                });
+                // 2. Update comments under every shared note in this app
+                const allSharedNotesSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'));
+                for (const noteDoc of allSharedNotesSnap.docs) {
+                    const commentsSnap = await getDocs(query(
+                        collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteDoc.id, 'comments'),
+                        where('authorId', '==', uid)
+                    ));
 
-                if (count > 0) {
-                    await batch.commit();
+                    commentsSnap.forEach(commentDoc => {
+                        updates.push({
+                            ref: commentDoc.ref,
+                            payload: {
+                                authorName: data.displayName,
+                                authorAvatar: data.photoURL,
+                                authorUsername: data.username
+                            }
+                        });
+                    });
+                }
+
+                if (updates.length > 0) {
+                    await commitChunkedUpdates();
                 }
             } catch (e) {
                 console.warn("Sync warning:", e);
             }
-            setBootStatus(""); 
+
+            // Keep cache fresh so currently open comment threads update immediately
+            commentProfilesCache[uid] = {
+                displayName: data.displayName,
+                photoURL: data.photoURL,
+                username: data.username
+            };
+            if (location.hash.includes('/public')) renderComments();
+
+            setBootStatus("");
         }
 
         window.updateProfile = async () => {
@@ -1340,6 +1367,11 @@
                          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', activeReport.id), {
                              flagged: true
                          });
+                    } else if (activeReport.type === 'comment') {
+                         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', activeReport.noteId, 'comments', activeReport.id), {
+                             flagged: true,
+                             flaggedReason: reason || "Community Violation"
+                         });
                     }
                     alert("Report accepted. Content has been flagged and hidden.");
                     // Reload current view
@@ -1366,12 +1398,43 @@
             
             const commentsPath = collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId, 'comments');
             
-            unsubscribeComments = onSnapshot(commentsPath, (snap) => {
+            unsubscribeComments = onSnapshot(commentsPath, async (snap) => {
                 currentNoteComments = snap.docs.map(d => ({id: d.id, ...d.data()}));
                 // Sort by time
                 currentNoteComments.sort((a,b) => a.timestamp - b.timestamp);
+                await hydrateCommentAuthorsFromProfiles();
                 renderComments();
                 document.getElementById('comment-count').innerText = currentNoteComments.length;
+            });
+        }
+
+        async function hydrateCommentAuthorsFromProfiles() {
+            const missingAuthorIds = [...new Set(currentNoteComments
+                .map(c => c.authorId)
+                .filter(uid => uid && !commentProfilesCache[uid]))];
+
+            if (missingAuthorIds.length === 0) return;
+
+            await Promise.all(missingAuthorIds.map(async uid => {
+                try {
+                    const profileSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', uid));
+                    if (profileSnap.exists()) {
+                        commentProfilesCache[uid] = profileSnap.data();
+                    }
+                } catch (e) {
+                    console.warn('Could not hydrate profile for comment author:', uid, e);
+                }
+            }));
+
+            currentNoteComments = currentNoteComments.map(comment => {
+                const profile = comment.authorId ? commentProfilesCache[comment.authorId] : null;
+                if (!profile) return comment;
+                return {
+                    ...comment,
+                    authorName: profile.displayName || comment.authorName,
+                    authorAvatar: profile.photoURL || comment.authorAvatar,
+                    authorUsername: profile.username || comment.authorUsername
+                };
             });
         }
 
@@ -1419,6 +1482,10 @@
             const div = document.createElement('div');
             div.className = "comment-thread flex gap-3";
             
+            const commentBody = comment.flagged
+                ? `<div class="text-xs text-red-300 bg-red-900/20 border border-red-500/20 rounded-lg p-2">⚠️ This comment has been flagged for review.</div>`
+                : `<div class="text-sm opacity-90 leading-relaxed break-words whitespace-pre-wrap">${comment.text}</div>`;
+
             div.innerHTML = `
                 <div class="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center font-bold text-xs shrink-0 select-none border border-white/10 overflow-hidden cursor-pointer" onclick="location.hash='#profiles/@${comment.authorUsername || 'unknown'}'">
                     ${comment.authorAvatar ? `<img src="${comment.authorAvatar}" class="w-full h-full object-cover">` : (comment.authorName ? comment.authorName[0].toUpperCase() : '?')}
@@ -1431,16 +1498,31 @@
                         ${comment.authorId === note?.authorId ? '<span class="text-[10px] bg-blue-900/30 text-blue-400 px-1.5 rounded uppercase tracking-wider">Owner</span>' : ''}
                         <span class="text-[10px] opacity-40">${new Date(comment.timestamp).toLocaleDateString()}</span>
                     </div>
-                    <div class="text-sm opacity-90 leading-relaxed break-words whitespace-pre-wrap">${comment.text}</div>
+                    ${commentBody}
                     
                     <div class="flex gap-4 mt-2">
-                        ${(!note?.commentsLocked || isOwner) ? `<button onclick="initReply('${comment.id}', '${comment.authorName}')" class="text-[11px] opacity-50 hover:opacity-100 hover:text-blue-400 font-medium transition-colors">Reply</button>` : ''}
+                        ${(!comment.flagged && (!note?.commentsLocked || isOwner)) ? `<button onclick="initReply('${comment.id}', '${comment.authorName}')" class="text-[11px] opacity-50 hover:opacity-100 hover:text-blue-400 font-medium transition-colors">Reply</button>` : ''}
+                        ${(!comment.flagged && !isMe) ? `<button onclick="initCommentReport('${comment.id}')" class="text-[11px] opacity-40 hover:opacity-100 hover:text-amber-400 transition-colors">Report</button>` : ''}
                         ${(isMe || isOwner) ? `<button onclick="deleteComment('${comment.id}')" class="text-[11px] opacity-40 hover:opacity-100 hover:text-red-400 transition-colors">Delete</button>` : ''}
                     </div>
                 </div>
             `;
             return div;
         }
+
+        window.initCommentReport = (commentId) => {
+            const noteId = location.hash.split('/')[1];
+            const comment = currentNoteComments.find(c => c.id === commentId);
+            if (!comment || !noteId) return;
+
+            activeReport = {
+                type: 'comment',
+                id: commentId,
+                noteId,
+                content: comment.text
+            };
+            document.getElementById('reportModal').classList.add('active');
+        };
 
         window.initReply = (id, name) => {
             replyToId = id;
@@ -1478,7 +1560,7 @@
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId, 'comments'), {
                     text: text,
                     authorId: currentUser.uid,
-                    authorName: currentUser.displayName || currentUser.email.split('@')[0],
+                    authorName: currentUserProfile?.displayName || currentUser.displayName || currentUser.email.split('@')[0],
                     authorUsername: currentUserProfile ? currentUserProfile.username : null, // Add username link
                     authorAvatar: currentUserProfile ? currentUserProfile.photoURL : null,
                     timestamp: Date.now(),
@@ -1662,10 +1744,28 @@
                      }
                 }
 
+                 const deletedAttachments = (note.editAttachments || []).filter(a => a.deleted);
+                 const keptAttachments = (note.editAttachments || []).filter(a => !a.deleted).map(({ deleted, ...rest }) => rest);
+                 const uploadedNewAttachments = [];
+
+                 for (const item of (note.pendingNewAttachments || [])) {
+                     const uploadResult = await uploadFileToStorage(currentUser.uid, item.file, item.id);
+                     uploadedNewAttachments.push({
+                         id: item.id,
+                         name: item.name,
+                         type: item.type,
+                         url: uploadResult.url,
+                         storagePath: uploadResult.storagePath
+                     });
+                 }
+
+                 const finalAttachments = [...keptAttachments, ...uploadedNewAttachments];
+
                  // Update Private
                  await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', currentEditingNoteId), {
                      text: val, 
                      date: new Date().toLocaleString(),
+                     attachments: finalAttachments,
                      flagged: false // Edit restores visibility if flagged
                  });
 
@@ -1674,8 +1774,28 @@
                      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', currentEditingNoteId), {
                          text: val,
                          date: new Date().toLocaleString(),
+                         attachments: finalAttachments,
                          flagged: false // Edit restores visibility
                      });
+                 }
+
+                 // Delete removed attachments from Storage as part of the save flow
+                 const deleteRefForAttachment = (att) => {
+                     if (att.storagePath) return ref(storage, att.storagePath);
+                     if (att.url) return ref(storage, att.url);
+                     return null;
+                 };
+
+                 const deletionResults = await Promise.allSettled(
+                     deletedAttachments
+                         .map(deleteRefForAttachment)
+                         .filter(Boolean)
+                         .map(fileRef => deleteObject(fileRef))
+                 );
+
+                 const failedDeletions = deletionResults.filter(r => r.status === 'rejected');
+                 if (failedDeletions.length > 0) {
+                     throw new Error(`${failedDeletions.length} attachment file(s) failed to delete from storage.`);
                  }
 
                  location.hash = `#notes/${currentEditingNoteId}`;
@@ -2004,11 +2124,61 @@
             currentEditingNoteId = id;
             document.getElementById('note-edit-area').value = note.text;
             
-            // Render read-only existing attachments in edit view
-            const attContainer = document.getElementById('edit-existing-attachments');
-            attContainer.innerHTML = (note.attachments || []).map(a => 
-                `<span class="text-[10px] bg-zinc-800 px-2 py-1 rounded text-white/50">${a.name}</span>`
-            ).join('');
+            // Initialize editable attachment state for edit mode
+            note.editAttachments = (note.attachments || []).map(att => ({ ...att, deleted: false }));
+            note.pendingNewAttachments = [];
+
+            const renderEditAttachments = () => {
+                const attContainer = document.getElementById('edit-existing-attachments');
+                attContainer.innerHTML = [
+                    ...note.editAttachments.map((a, idx) => `
+                        <div class="attachment-tag ${a.deleted ? 'deleted' : ''}">
+                            <span class="truncate max-w-[150px]">${a.name}</span>
+                            <button onclick="toggleEditAttachmentDelete(${idx})" title="${a.deleted ? 'Restore' : 'Remove'}">${a.deleted ? '↺' : '✕'}</button>
+                        </div>
+                    `),
+                    ...note.pendingNewAttachments.map((a, idx) => `
+                        <div class="attachment-tag">
+                            <span class="truncate max-w-[150px]">${a.name}</span>
+                            <button onclick="removePendingEditAttachment(${idx})" title="Remove">✕</button>
+                        </div>
+                    `)
+                ].join('');
+            };
+
+            window.toggleEditAttachmentDelete = (idx) => {
+                note.editAttachments[idx].deleted = !note.editAttachments[idx].deleted;
+                renderEditAttachments();
+            };
+
+            window.handleEditFileSelect = (input) => {
+                if (input.files && input.files[0]) {
+                    const file = input.files[0];
+                    const existsInCurrent = note.editAttachments.some(a => a.name === file.name && !a.deleted);
+                    const existsInNew = note.pendingNewAttachments.some(a => a.name === file.name);
+                    if (existsInCurrent || existsInNew) {
+                        alert('This file is already attached.');
+                        input.value = '';
+                        return;
+                    }
+
+                    note.pendingNewAttachments.push({
+                        id: crypto.randomUUID(),
+                        name: file.name,
+                        type: file.type,
+                        file
+                    });
+                    renderEditAttachments();
+                    input.value = '';
+                }
+            };
+
+            window.removePendingEditAttachment = (idx) => {
+                note.pendingNewAttachments.splice(idx, 1);
+                renderEditAttachments();
+            };
+
+            renderEditAttachments();
 
             document.getElementById('cancel-edit-btn').onclick = () => location.hash = `#notes/${id}`;
             document.getElementById('update-note-btn').onclick = () => saveEditNote(); 
@@ -2130,4 +2300,3 @@
     </script>
 </body>
 </html>
-
