@@ -1096,11 +1096,21 @@
             // data = { displayName, photoURL, username }
             if (!currentUser) return;
             const uid = currentUser.uid;
-            
+
             setBootStatus("Syncing changes across app...");
-            const batch = writeBatch(db);
-            let count = 0;
-            const MAX_BATCH = 450; 
+
+            const updates = [];
+            const MAX_BATCH = 450;
+
+            const commitChunkedUpdates = async () => {
+                for (let i = 0; i < updates.length; i += MAX_BATCH) {
+                    const batch = writeBatch(db);
+                    updates.slice(i, i + MAX_BATCH).forEach(({ ref, payload }) => {
+                        batch.update(ref, payload);
+                    });
+                    await batch.commit();
+                }
+            };
 
             try {
                 // 1. Update Notes
@@ -1109,41 +1119,42 @@
                     where('authorId', '==', uid)
                 );
                 const notesSnap = await getDocs(notesQuery);
-                notesSnap.forEach(doc => {
-                    if (count < MAX_BATCH) {
-                        batch.update(doc.ref, {
+                notesSnap.forEach(noteDoc => {
+                    updates.push({
+                        ref: noteDoc.ref,
+                        payload: {
                             author: data.displayName,
                             authorUsername: data.username
-                        });
-                        count++;
-                    }
+                        }
+                    });
                 });
 
                 // 2. Update Comments
                 const commentsQuery = query(
-                    collectionGroup(db, 'comments'), 
+                    collectionGroup(db, 'comments'),
                     where('authorId', '==', uid)
                 );
-                
                 const commentsSnap = await getDocs(commentsQuery);
-                commentsSnap.forEach(doc => {
-                    if (doc.ref.path.includes(appId) && count < MAX_BATCH) {
-                        batch.update(doc.ref, {
+                commentsSnap.forEach(commentDoc => {
+                    if (!commentDoc.ref.path.includes(appId)) return;
+                    updates.push({
+                        ref: commentDoc.ref,
+                        payload: {
                             authorName: data.displayName,
                             authorAvatar: data.photoURL,
                             authorUsername: data.username
-                        });
-                        count++;
-                    }
+                        }
+                    });
                 });
 
-                if (count > 0) {
-                    await batch.commit();
+                if (updates.length > 0) {
+                    await commitChunkedUpdates();
                 }
             } catch (e) {
                 console.warn("Sync warning:", e);
             }
-            setBootStatus(""); 
+
+            setBootStatus("");
         }
 
         window.updateProfile = async () => {
@@ -1478,7 +1489,7 @@
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId, 'comments'), {
                     text: text,
                     authorId: currentUser.uid,
-                    authorName: currentUser.displayName || currentUser.email.split('@')[0],
+                    authorName: currentUserProfile?.displayName || currentUser.displayName || currentUser.email.split('@')[0],
                     authorUsername: currentUserProfile ? currentUserProfile.username : null, // Add username link
                     authorAvatar: currentUserProfile ? currentUserProfile.photoURL : null,
                     timestamp: Date.now(),
@@ -2130,4 +2141,3 @@
     </script>
 </body>
 </html>
-
