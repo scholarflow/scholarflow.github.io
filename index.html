@@ -627,14 +627,24 @@
         <!-- Settings -->
         <section id="settings" class="tab-content">
             <h2 class="text-2xl google-sans mb-4 px-2">Settings</h2>
-            <div class="material-card">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="font-medium">Theme</p>
-                        <p class="text-xs opacity-60">Switch between light and dark mode</p>
+            <div class="space-y-4">
+                <div class="material-card">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="font-medium">Theme</p>
+                            <p class="text-xs opacity-60">Switch between light and dark mode</p>
+                        </div>
+                        <button onclick="toggleTheme()" class="px-4 py-2 rounded-full bg-zinc-800 ripple text-sm font-medium">
+                            <span id="themeIcon">☀️</span>
+                        </button>
                     </div>
-                    <button onclick="toggleTheme()" class="px-4 py-2 rounded-full bg-zinc-800 ripple text-sm font-medium">
-                        <span id="themeIcon">☀️</span>
+                </div>
+
+                <div class="material-card border border-red-500/20">
+                    <p class="font-medium text-red-300">Delete Profile</p>
+                    <p class="text-xs opacity-60 mt-1">Permanently removes your public profile and username. Your account will remain active.</p>
+                    <button onclick="deleteMyProfile()" class="mt-4 w-full py-3 rounded-xl bg-red-500/20 text-red-300 font-medium ripple hover:bg-red-500/30 transition-colors">
+                        Delete Profile
                     </button>
                 </div>
             </div>
@@ -2297,6 +2307,40 @@
             const icon = document.getElementById('themeIcon');
             if (icon) icon.innerText = document.body.classList.contains('light') ? '🌙' : '☀️';
             if(window.location.hash === '#graph') drawGraph();
+        };
+
+        window.deleteMyProfile = async () => {
+            if (!currentUser || !currentUserProfile) {
+                alert('No profile found to delete.');
+                return;
+            }
+
+            const confirmed = confirm('Delete your profile? This removes your public profile and username permanently.');
+            if (!confirmed) return;
+
+            const secondConfirm = prompt('Type DELETE to confirm profile deletion.');
+            if (secondConfirm !== 'DELETE') {
+                alert('Profile deletion cancelled.');
+                return;
+            }
+
+            try {
+                const username = currentUserProfile.username;
+
+                await Promise.all([
+                    deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', currentUser.uid)),
+                    username ? deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'usernames', username)) : Promise.resolve(),
+                    deleteObject(ref(storage, `users/${currentUser.uid}/avatar/profile.jpg`)).catch(() => null)
+                ]);
+
+                currentUserProfile = null;
+                alert('Profile deleted. You can create a new one anytime.');
+                location.hash = '#profile';
+                renderProfileUI();
+            } catch (e) {
+                console.error(e);
+                alert('Could not delete profile. Please try again.');
+            }
         };
 
         document.addEventListener('mousedown', (e) => {
