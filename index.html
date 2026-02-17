@@ -1720,7 +1720,7 @@
                      }
                 }
 
-                 const deletedAttachments = (note.editAttachments || []).filter(a => a.deleted && a.storagePath);
+                 const deletedAttachments = (note.editAttachments || []).filter(a => a.deleted);
                  const keptAttachments = (note.editAttachments || []).filter(a => !a.deleted).map(({ deleted, ...rest }) => rest);
                  const uploadedNewAttachments = [];
 
@@ -1755,8 +1755,24 @@
                      });
                  }
 
-                 // Best effort cleanup of removed files from Storage
-                 await Promise.all(deletedAttachments.map(att => deleteObject(ref(storage, att.storagePath)).catch(() => null)));
+                 // Delete removed attachments from Storage as part of the save flow
+                 const deleteRefForAttachment = (att) => {
+                     if (att.storagePath) return ref(storage, att.storagePath);
+                     if (att.url) return ref(storage, att.url);
+                     return null;
+                 };
+
+                 const deletionResults = await Promise.allSettled(
+                     deletedAttachments
+                         .map(deleteRefForAttachment)
+                         .filter(Boolean)
+                         .map(fileRef => deleteObject(fileRef))
+                 );
+
+                 const failedDeletions = deletionResults.filter(r => r.status === 'rejected');
+                 if (failedDeletions.length > 0) {
+                     throw new Error(`${failedDeletions.length} attachment file(s) failed to delete from storage.`);
+                 }
 
                  location.hash = `#notes/${currentEditingNoteId}`;
 
