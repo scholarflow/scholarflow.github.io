@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>404 - ScholarFlow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --md-sys-color-primary: #a8c7fa;
+            --md-sys-color-on-primary: #062e6f;
+            --md-sys-color-surface: #1b1b1f;
+            --md-sys-color-on-surface: #e3e3e3;
+            --md-sys-color-secondary-container: #333537;
+            --md-sys-color-on-secondary-container: #e3e3e3;
+            --ripple-color: rgba(255, 255, 255, 0.1);
+        }
+
+        body.light {
+            --md-sys-color-primary: #0b57d0;
+            --md-sys-color-on-primary: #ffffff;
+            --md-sys-color-surface: #fef7ff;
+            --md-sys-color-on-surface: #1d1b20;
+            --md-sys-color-secondary-container: #e8f0fe;
+            --md-sys-color-on-secondary-container: #174ea6;
+            --ripple-color: rgba(0, 0, 0, 0.05);
+        }
+
+        body {
+            background-color: var(--md-sys-color-surface);
+            color: var(--md-sys-color-on-surface);
+            font-family: 'Roboto', sans-serif;
+            transition: background-color 0.2s;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .google-sans { font-family: 'Google Sans', sans-serif; }
+
+        .ripple { position: relative; overflow: hidden; }
+        .ripple-element {
+            position: absolute; border-radius: 50%; background: var(--ripple-color);
+            transform: scale(0); animation: ripple-animation 0.5s linear; pointer-events: none;
+        }
+        @keyframes ripple-animation { to { transform: scale(4); opacity: 0; } }
+
+        .error-code {
+            font-size: clamp(8rem, 25vw, 12rem);
+            line-height: 1;
+            background: linear-gradient(180deg, var(--md-sys-color-primary) 0%, transparent 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            opacity: 0.4;
+        }
+
+        .floating {
+            animation: floating 6s ease-in-out infinite;
+        }
+        @keyframes floating {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .material-button {
+            background-color: var(--md-sys-color-primary);
+            color: var(--md-sys-color-on-primary);
+            padding: 12px 24px;
+            border-radius: 100px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .material-button:active { transform: scale(0.95); }
+    </style>
+</head>
+<body>
+
+    <header class="p-4 flex justify-between items-center bg-[var(--md-sys-color-surface)]">
+        <div class="flex items-center gap-3">
+            <span class="text-2xl text-blue-400">●</span>
+            <h1 class="text-xl font-medium tracking-tight google-sans">ScholarFlow</h1>
+        </div>
+        <button onclick="toggleTheme()" class="p-3 ripple rounded-full">
+            <span id="themeIcon">☀️</span>
+        </button>
+    </header>
+
+    <main class="flex-1 flex flex-col items-center justify-center p-6 text-center relative">
+        <!-- Background decorative element -->
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
+            <div class="error-code font-bold google-sans">404</div>
+        </div>
+
+        <div class="z-10 space-y-6 max-w-md floating">
+            <div class="text-6xl mb-4">🔍</div>
+            <h2 class="text-3xl font-bold google-sans">Lost in the Flow?</h2>
+            <p class="text-lg opacity-70">
+                The page you're looking for has graduated or moved to a different campus. Let's get you back to your studies.
+            </p>
+            
+            <div class="pt-6">
+                <a href="/" class="material-button ripple google-sans">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    Go Back Home
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer class="p-8 text-center text-sm opacity-40">
+        &copy; ScholarFlow Material Suite
+    </footer>
+
+    <script>
+        // Use system theme or existing preference
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+            document.body.classList.add('light');
+            document.getElementById('themeIcon').innerText = '🌙';
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('light');
+            document.getElementById('themeIcon').innerText = document.body.classList.contains('light') ? '🌙' : '☀️';
+        }
+
+        // Ripple Effect
+        document.addEventListener('mousedown', (e) => {
+            const btn = e.target.closest('.ripple');
+            if (!btn) return;
+            const circle = document.createElement('span');
+            const d = Math.max(btn.clientWidth, btn.clientHeight);
+            const r = btn.getBoundingClientRect();
+            circle.style.width = circle.style.height = `${d}px`;
+            circle.style.left = `${e.clientX - r.left - d/2}px`;
+            circle.style.top = `${e.clientY - r.top - d/2}px`;
+            circle.className = 'ripple-element';
+            btn.appendChild(circle);
+            setTimeout(() => circle.remove(), 600);
+        });
+    </script>
+</body>
+</html>
+

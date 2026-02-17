@@ -1,0 +1,2133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ScholarFlow - Cloud Suite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto+Mono&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --md-sys-color-primary: #a8c7fa;
+            --md-sys-color-on-primary: #062e6f;
+            --md-sys-color-surface: #1b1b1f;
+            --md-sys-color-on-surface: #e3e3e3;
+            --md-sys-color-surface-variant: #444746;
+            --md-sys-color-secondary-container: #333537;
+            --md-sys-color-on-secondary-container: #e3e3e3;
+            --ripple-color: rgba(255, 255, 255, 0.1);
+        }
+
+        body.light {
+            --md-sys-color-primary: #0b57d0;
+            --md-sys-color-on-primary: #ffffff;
+            --md-sys-color-surface: #fef7ff;
+            --md-sys-color-on-surface: #1d1b20;
+            --md-sys-color-surface-variant: #e1e2ec;
+            --md-sys-color-secondary-container: #e8f0fe;
+            --md-sys-color-on-secondary-container: #174ea6;
+            --ripple-color: rgba(0, 0, 0, 0.05);
+        }
+
+        body {
+            background-color: var(--md-sys-color-surface);
+            color: var(--md-sys-color-on-surface);
+            font-family: 'Roboto', sans-serif;
+            transition: background-color 0.2s;
+            touch-action: manipulation;
+            overscroll-behavior-y: none; /* Prevent pull-to-refresh on mobile */
+        }
+
+        h1, h2, h3, .google-sans { font-family: 'Google Sans', sans-serif; }
+
+        .tab-content { display: none; padding-bottom: 80px; }
+        .tab-content.active { display: block; animation: fadeUp 0.25s cubic-bezier(0, 0, 0.2, 1); }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        .ripple { position: relative; overflow: hidden; transform: translateZ(0); }
+        .ripple-element {
+            position: absolute; border-radius: 50%; background: var(--ripple-color);
+            transform: scale(0); animation: ripple-animation 0.5s linear; pointer-events: none;
+        }
+        @keyframes ripple-animation { to { transform: scale(4); opacity: 0; } }
+
+        .nav-item.active .pill { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+        .pill { transition: all 0.2s ease; width: 64px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 16px; }
+
+        input, textarea, select {
+            background: rgba(128,128,128,0.05);
+            border: 1px solid var(--md-sys-color-surface-variant);
+            border-radius: 12px;
+            padding: 12px;
+            color: inherit;
+            font-size: 16px; /* Prevents iOS zoom */
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: 2px solid var(--md-sys-color-primary);
+            border-color: transparent;
+        }
+
+        .material-card {
+            background: var(--md-sys-color-secondary-container);
+            border-radius: 20px;
+            padding: 16px;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        #timerStroke { transition: stroke-dashoffset 1s linear; }
+        
+        .edit-area {
+            background: transparent;
+            border: none;
+            width: 100%;
+            height: 50vh;
+            outline: none;
+            font-size: 1.1rem;
+            line-height: 1.6;
+            resize: none;
+        }
+
+        .overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--md-sys-color-surface); z-index: 50;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 24px;
+        }
+        
+        /* Modal for Reporting */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 100;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 24px;
+            opacity: 0; pointer-events: none; transition: opacity 0.2s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+
+        /* Flagged Content Overlay */
+        .flagged-overlay {
+            background: rgba(127, 29, 29, 0.2);
+            border: 1px solid rgba(220, 38, 38, 0.3);
+            color: #fca5a5;
+            backdrop-filter: blur(8px);
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            min-height: 200px;
+        }
+        .flagged-title { font-weight: bold; font-size: 1.1em; color: #f87171; }
+
+        /* Initial Boot Loader */
+        #boot-loader {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: var(--md-sys-color-surface); z-index: 100;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: opacity 0.5s ease-out, visibility 0.5s;
+        }
+        #boot-loader.loaded {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+        .boot-spinner {
+            width: 48px; height: 48px;
+            border: 4px solid var(--md-sys-color-surface-variant);
+            border-top-color: var(--md-sys-color-primary);
+            border-radius: 50%;
+            animation: bootSpin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+        @keyframes bootSpin { to { transform: rotate(360deg); } }
+
+        /* Segmented Control */
+        .segmented-control {
+            background: rgba(128,128,128,0.1);
+            border-radius: 999px;
+            padding: 4px;
+            display: flex;
+            position: relative;
+        }
+        .segment-btn {
+            flex: 1;
+            text-align: center;
+            padding: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            z-index: 1;
+            border-radius: 999px;
+            transition: color 0.2s;
+            cursor: pointer;
+            user-select: none;
+        }
+        .segment-btn.active {
+            background: var(--md-sys-color-surface);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            color: var(--md-sys-color-primary);
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            display: inline-block;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border-top: 3px solid var(--md-sys-color-primary);
+            width: 20px; height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Attachment Tag Styles */
+        .attachment-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(66, 133, 244, 0.15);
+            color: #8ab4f8;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            max-width: 100%;
+            border: 1px solid transparent;
+        }
+        body.light .attachment-tag {
+            background: #e8f0fe;
+            color: #174ea6;
+        }
+        .attachment-tag button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            opacity: 0.6;
+        }
+        .attachment-tag button:hover {
+            opacity: 1;
+            background: rgba(0,0,0,0.1);
+        }
+        .attachment-tag.deleted {
+            text-decoration: line-through;
+            opacity: 0.6;
+            background: rgba(255, 0, 0, 0.05);
+            color: #ffb4ab;
+            border-color: rgba(255,0,0,0.2);
+        }
+        body.light .attachment-tag.deleted {
+            color: #ba1a1a;
+        }
+
+        /* Comment Styles */
+        .comment-thread {
+            position: relative;
+        }
+        .comment-thread::before {
+            content: '';
+            position: absolute;
+            left: 14px;
+            top: 40px;
+            bottom: 0;
+            width: 2px;
+            background: var(--md-sys-color-surface-variant);
+            opacity: 0.3;
+        }
+        .comment-thread:last-child::before { display: none; }
+        .reply-line::before {
+            content: '';
+            position: absolute;
+            left: -24px;
+            top: -20px;
+            bottom: 20px;
+            width: 2px;
+            background: var(--md-sys-color-surface-variant);
+            opacity: 0.3;
+            border-bottom-left-radius: 8px;
+        }
+        .reply-curve {
+            position: absolute;
+            left: -24px;
+            top: 14px;
+            width: 16px;
+            height: 2px;
+            background: var(--md-sys-color-surface-variant);
+            opacity: 0.3;
+        }
+
+        /* Profile Styles */
+        .profile-header-bg {
+            height: 120px;
+            background: linear-gradient(135deg, var(--md-sys-color-primary) 0%, var(--md-sys-color-surface-variant) 100%);
+            opacity: 0.2;
+            border-radius: 20px 20px 0 0;
+        }
+        .profile-avatar-xl {
+            width: 100px; height: 100px;
+            border-radius: 50%;
+            border: 4px solid var(--md-sys-color-surface);
+            background: var(--md-sys-color-surface-variant);
+            margin-top: -50px;
+            margin-left: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-weight: bold;
+            overflow: hidden;
+            position: relative;
+        }
+        .profile-avatar-xl img {
+            width: 100%; height: 100%; object-fit: cover;
+        }
+
+        /* Utilities */
+        .hidden-force { display: none !important; }
+    </style>
+</head>
+<body class="pb-24">
+
+    <!-- Global Application Loader -->
+    <div id="boot-loader">
+        <div class="boot-spinner mb-6"></div>
+        <div class="flex items-center gap-3 animate-pulse">
+            <span class="text-2xl text-blue-400">●</span>
+            <h1 class="text-xl google-sans font-medium">ScholarFlow</h1>
+        </div>
+        <p class="text-xs mt-4 opacity-50 font-mono" id="boot-status">Initializing...</p>
+    </div>
+
+    <!-- Auth UI Layer -->
+    <div id="authOverlay" class="overlay hidden-force">
+        <div class="max-w-xs w-full text-center space-y-8">
+            <div class="space-y-2">
+                <span class="text-5xl text-blue-400">●</span>
+                <h1 class="text-3xl google-sans font-medium">ScholarFlow</h1>
+                <p class="opacity-60 text-sm">Sign in to sync your work</p>
+            </div>
+
+            <div id="emailForm" class="space-y-3 hidden">
+                <input id="authEmail" type="email" placeholder="Email" class="w-full">
+                <input id="authPass" type="password" placeholder="Password" class="w-full">
+                
+                <div class="flex justify-end px-1">
+                    <button onclick="handlePasswordReset()" class="text-xs text-blue-400 hover:text-blue-300 transition-colors opacity-80 hover:opacity-100">Forgot Password?</button>
+                </div>
+
+                <div class="flex gap-2">
+                    <button onclick="handleEmailAuth('signin')" class="flex-1 bg-blue-400 text-blue-950 py-3 rounded-full font-medium ripple">Sign In</button>
+                    <button onclick="handleEmailAuth('signup')" class="flex-1 border border-blue-400 text-blue-400 py-3 rounded-full font-medium ripple">Sign Up</button>
+                </div>
+                <button onclick="toggleAuthMethod('google')" class="text-sm opacity-60 hover:opacity-100">Back to Google Sign-in</button>
+            </div>
+
+            <div id="socialAuth" class="space-y-4">
+                <button onclick="signInWithGoogle()" class="w-full bg-white text-gray-900 py-3 rounded-full font-medium flex items-center justify-center gap-3 ripple">
+                    <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.59.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962l3.007 2.332C4.672 5.164 6.656 3.58 9 3.58z"/></svg>
+                    Continue with Google
+                </button>
+                <div class="flex items-center gap-4 opacity-30 px-4">
+                    <hr class="flex-1"><span>or</span><hr class="flex-1">
+                </div>
+                <button onclick="toggleAuthMethod('email')" class="w-full bg-zinc-800 py-3 rounded-full font-medium ripple">Use Email Address</button>
+            </div>
+            
+            <p id="authError" class="text-xs mt-4 min-h-[1rem] transition-colors duration-200"></p>
+        </div>
+    </div>
+
+    <!-- Reporting Modal -->
+    <div id="reportModal" class="modal-overlay">
+        <div class="material-card w-full max-w-sm space-y-4">
+            <h3 class="text-xl font-bold text-red-400">Report Content</h3>
+            <p class="text-sm opacity-80">Help the AI understand why this is violative. If this contains slang or context the AI missed, please explain below.</p>
+            
+            <div>
+                <label class="text-xs uppercase font-bold opacity-50 ml-1">Reason / Context</label>
+                <textarea id="report-reason" placeholder="e.g. This phrase is actually offensive slang for..." class="w-full mt-1 h-24"></textarea>
+            </div>
+            
+            <div class="flex gap-2 pt-2">
+                <button onclick="closeReportModal()" class="flex-1 py-3 rounded-xl font-medium ripple hover:bg-white/5">Cancel</button>
+                <button onclick="submitReport()" id="btn-submit-report" class="flex-1 bg-red-400 text-red-950 py-3 rounded-xl font-bold ripple">Submit Report</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App UI -->
+    <header id="appHeader" class="p-4 flex justify-between items-center sticky top-0 bg-[var(--md-sys-color-surface)] z-40 hidden-force">
+        <div class="flex items-center gap-3">
+            <span class="text-2xl text-blue-400">●</span>
+            <h1 class="text-xl font-medium tracking-tight google-sans">ScholarFlow</h1>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="handleSignOut()" class="text-[10px] opacity-40 hover:opacity-100 uppercase tracking-widest font-bold">Logout</button>
+            <button onclick="toggleTheme()" class="p-3 ripple rounded-full">
+                <span id="themeIcon">☀️</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-xl mx-auto p-4 hidden-force" id="main-content">
+        
+        <!-- Calculator -->
+        <section id="calculator" class="tab-content">
+            <div class="mb-8 text-right px-4">
+                <div id="calcExp" class="text-lg opacity-60 h-8 font-mono overflow-hidden"></div>
+                <div id="calcDisplay" class="text-6xl google-sans font-light py-2 truncate select-all">0</div>
+            </div>
+            <div class="grid grid-cols-4 gap-3">
+                <button onclick="calcClear()" class="ripple h-16 rounded-full bg-slate-800 text-red-400 font-medium">AC</button>
+                <button onclick="calcInput('(')" class="ripple h-16 rounded-full bg-slate-800 text-blue-400">(</button>
+                <button onclick="calcInput(')')" class="ripple h-16 rounded-full bg-slate-800 text-blue-400">)</button>
+                <button onclick="calcInput('/')" class="ripple h-16 rounded-full bg-blue-900/30 text-blue-400">÷</button>
+                <button onclick="calcInput('7')" class="ripple h-16 rounded-full bg-zinc-800/50">7</button>
+                <button onclick="calcInput('8')" class="ripple h-16 rounded-full bg-zinc-800/50">8</button>
+                <button onclick="calcInput('9')" class="ripple h-16 rounded-full bg-zinc-800/50">9</button>
+                <button onclick="calcInput('*')" class="ripple h-16 rounded-full bg-blue-900/30 text-blue-400">×</button>
+                <button onclick="calcInput('4')" class="ripple h-16 rounded-full bg-zinc-800/50">4</button>
+                <button onclick="calcInput('5')" class="ripple h-16 rounded-full bg-zinc-800/50">5</button>
+                <button onclick="calcInput('6')" class="ripple h-16 rounded-full bg-zinc-800/50">6</button>
+                <button onclick="calcInput('-')" class="ripple h-16 rounded-full bg-blue-900/30 text-blue-400">−</button>
+                <button onclick="calcInput('1')" class="ripple h-16 rounded-full bg-zinc-800/50">1</button>
+                <button onclick="calcInput('2')" class="ripple h-16 rounded-full bg-zinc-800/50">2</button>
+                <button onclick="calcInput('3')" class="ripple h-16 rounded-full bg-zinc-800/50">3</button>
+                <button onclick="calcInput('+')" class="ripple h-16 rounded-full bg-blue-900/30 text-blue-400">+</button>
+                <button onclick="calcInput('0')" class="ripple h-16 rounded-full bg-zinc-800/50 col-span-2 text-left px-8">0</button>
+                <button onclick="calcInput('.')" class="ripple h-16 rounded-full bg-zinc-800/50">.</button>
+                <button onclick="calcEval()" class="ripple h-16 rounded-full bg-blue-400 text-blue-950 font-bold">=</button>
+            </div>
+        </section>
+
+        <!-- Graph -->
+        <section id="graph" class="tab-content">
+            <h2 class="text-2xl google-sans mb-4 px-2">Grapher</h2>
+            <div class="material-card space-y-4">
+                <div class="flex items-center gap-2 bg-black/20 p-3 rounded-xl border border-white/5">
+                    <span class="italic text-blue-400 font-serif">y = </span>
+                    <input id="graphInput" value="x * x" oninput="drawGraph()" class="bg-transparent outline-none flex-1 font-mono text-sm border-none p-0 focus:ring-0">
+                </div>
+                <div class="w-full h-64 bg-black/10 rounded-xl relative overflow-hidden">
+                    <canvas id="graphCanvas" class="w-full h-full block"></canvas>
+                </div>
+            </div>
+            <div class="flex gap-2 overflow-x-auto py-4 no-scrollbar">
+                <button onclick="setGraph('Math.sin(x)')" class="ripple px-4 py-2 bg-zinc-800 rounded-full text-xs whitespace-nowrap">Sine Wave</button>
+                <button onclick="setGraph('Math.abs(x)')" class="ripple px-4 py-2 bg-zinc-800 rounded-full text-xs whitespace-nowrap">Absolute</button>
+                <button onclick="setGraph('Math.log(x)')" class="ripple px-4 py-2 bg-zinc-800 rounded-full text-xs whitespace-nowrap">Logarithm</button>
+            </div>
+        </section>
+
+        <!-- Notes List -->
+        <section id="notes" class="tab-content">
+            <div class="flex items-center justify-between mb-4 px-2">
+                <h2 class="text-2xl google-sans">Notes</h2>
+            </div>
+            
+            <div class="segmented-control mb-6">
+                <div id="btn-private" onclick="switchNoteView('private')" class="segment-btn active">My Notes</div>
+                <div id="btn-public" onclick="switchNoteView('public')" class="segment-btn">Community</div>
+            </div>
+
+            <div id="private-input-area" class="material-card mb-6">
+                <textarea id="noteInput" placeholder="Write something new..." class="w-full h-24 border-none outline-none resize-none bg-transparent mb-2 placeholder-white/20"></textarea>
+                
+                <!-- Pending Attachments List -->
+                <div id="pending-attachments" class="flex flex-wrap gap-2 mb-3 empty:hidden"></div>
+
+                <div class="flex justify-between items-center pt-2 border-t border-white/5">
+                    <div>
+                        <input type="file" id="noteFileInput" class="hidden" onchange="handleFileSelect(this)">
+                        <button onclick="document.getElementById('noteFileInput').click()" class="p-2 text-blue-400 opacity-60 hover:opacity-100 ripple rounded-full hover:bg-blue-400/10 transition-colors" title="Attach file">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                        </button>
+                    </div>
+                    <button id="saveNoteBtn" onclick="saveNote()" class="ripple bg-blue-400 text-blue-950 px-6 py-2 rounded-full font-medium flex items-center gap-2">
+                        <span>Add Note</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div id="notesContainer" class="space-y-3 pb-20"></div>
+        </section>
+
+        <!-- Note Detail View -->
+        <section id="note-detail" class="tab-content">
+            <div class="flex justify-between items-center mb-6">
+                <button onclick="location.hash='#notes'" class="flex items-center gap-2 text-blue-400 font-medium p-2 -ml-2 rounded-lg hover:bg-white/5 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    Back
+                </button>
+                <div class="flex gap-2">
+                    <button id="report-note-btn" class="bg-red-900/30 text-red-400 w-10 h-10 rounded-full flex items-center justify-center ripple hidden-force" title="Report Note">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                    </button>
+                    <button id="share-note-btn" class="bg-zinc-800 text-blue-400 w-10 h-10 rounded-full flex items-center justify-center ripple hidden-force">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    </button>
+                    <button id="edit-note-btn" class="bg-blue-400/10 text-blue-400 px-4 py-1 rounded-full text-sm font-medium ripple hidden-force">Edit Note</button>
+                </div>
+            </div>
+            
+            <div id="shared-badge" class="hidden-force mb-4 bg-green-900/30 text-green-400 px-4 py-2 rounded-lg text-sm flex items-center gap-2 w-fit">
+                <span class="w-2 h-2 rounded-full bg-green-400"></span>
+                Publicly Shared
+            </div>
+            
+            <div id="note-card-container" class="material-card min-h-[50vh] relative">
+                <a id="note-detail-author" href="#" class="text-sm opacity-50 mb-4 font-mono hidden-force hover:text-blue-400 hover:underline"></a>
+                <div id="note-detail-content" class="whitespace-pre-wrap text-lg leading-relaxed mb-6"></div>
+                
+                <!-- Attachments Container -->
+                <div id="note-detail-attachments" class="space-y-4 border-t border-white/5 pt-4 mb-4 hidden-force">
+                    <h3 class="text-xs uppercase tracking-widest opacity-50">Attachments</h3>
+                    <div id="attachments-list" class="grid gap-4"></div>
+                </div>
+
+                <div class="mt-8 pt-8 border-t border-white/5 text-sm opacity-40 italic" id="note-detail-date"></div>
+
+                <!-- Comments Section (Public Only) -->
+                <div id="comments-section" class="mt-8 border-t border-white/10 pt-6 hidden-force">
+                    
+                    <!-- Comment Admin Controls -->
+                    <div id="comment-admin-controls" class="mb-4 p-3 bg-blue-900/20 rounded-xl flex items-center justify-between hidden-force">
+                        <span class="text-xs font-bold text-blue-300 uppercase tracking-wider">Owner Controls</span>
+                        <div class="flex gap-3">
+                            <button onclick="toggleCommentLock()" id="btn-lock-comments" class="text-xs px-3 py-1.5 rounded-full bg-zinc-800 hover:bg-zinc-700 transition-colors">
+                                🔓 Lock Comments
+                            </button>
+                            <button onclick="toggleDisableComments()" id="btn-disable-comments" class="text-xs px-3 py-1.5 rounded-full bg-zinc-800 hover:bg-zinc-700 transition-colors">
+                                👁️ Hide Section
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="comments-content-wrapper">
+                        <h3 class="text-lg font-medium mb-4 flex items-center gap-2">
+                            Comments 
+                            <span id="comment-count" class="text-xs opacity-50 bg-zinc-800 px-2 py-0.5 rounded-full font-mono">0</span>
+                        </h3>
+                        
+                        <!-- Comment Input -->
+                        <div id="comment-input-container" class="mb-6 flex gap-3">
+                            <div class="w-8 h-8 rounded-full bg-blue-400 text-blue-950 flex items-center justify-center font-bold text-sm shrink-0 shadow-lg" id="current-user-avatar">
+                                ?
+                            </div>
+                            <div class="flex-1">
+                                <div id="replying-banner" class="hidden text-xs text-blue-400 mb-2 flex justify-between items-center bg-blue-900/20 p-2 rounded">
+                                    <span>Replying to comment...</span>
+                                    <button onclick="cancelReply()" class="hover:text-white px-2">✕</button>
+                                </div>
+                                <div class="relative">
+                                    <textarea id="new-comment-text" placeholder="Add a comment..." class="w-full h-24 resize-none text-sm p-3 pr-12 bg-black/20 focus:bg-black/40 transition-colors rounded-xl border border-white/10"></textarea>
+                                    <button onclick="postComment()" class="absolute bottom-3 right-3 p-2 bg-blue-400 text-blue-950 rounded-full hover:bg-blue-300 transition-colors shadow-lg">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                    </button>
+                                </div>
+                                <div class="text-[10px] opacity-40 mt-1 pl-1">Comments are AI-moderated.</div>
+                            </div>
+                        </div>
+
+                        <!-- Locked Banner -->
+                        <div id="comments-locked-banner" class="hidden-force mb-6 p-3 bg-red-900/20 border border-red-500/20 rounded-lg text-red-300 text-xs text-center">
+                            Comments are turned off for this note.
+                        </div>
+
+                        <!-- Comments List -->
+                        <div id="comments-list" class="space-y-4 pb-20"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Note Edit View -->
+        <section id="note-edit" class="tab-content">
+            <div class="flex justify-between items-center mb-6">
+                <button id="cancel-edit-btn" class="flex items-center gap-2 opacity-60 font-medium hover:opacity-100 transition-opacity">Cancel</button>
+                <div class="flex items-center gap-2">
+                     <button id="update-note-btn" class="bg-blue-400 text-blue-950 px-6 py-2 rounded-full font-medium ripple">Save</button>
+                </div>
+            </div>
+            <div class="material-card">
+                <textarea id="note-edit-area" class="edit-area mb-4"></textarea>
+                
+                <!-- Edit Mode Attachments -->
+                <div id="edit-attachments-container" class="border-t border-white/5 pt-4">
+                    <p class="text-[10px] uppercase opacity-50 mb-2">Attachments (Read Only in Edit Mode)</p>
+                    <div id="edit-existing-attachments" class="flex flex-wrap gap-2 mb-2"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Profile Section -->
+        <section id="profile" class="tab-content">
+            <div class="flex justify-between items-center mb-4 px-2">
+                <h2 class="text-2xl google-sans">Profile</h2>
+                <div class="flex gap-2">
+                     <button id="report-profile-btn" onclick="initProfileReport()" class="ripple p-2 rounded-full bg-red-900/30 text-red-400 hidden-force" title="Report Profile">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                     </button>
+                     <button onclick="location.hash='#profiles/search'" class="ripple p-2 rounded-full bg-zinc-800 text-blue-400">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                     </button>
+                </div>
+            </div>
+
+            <!-- Profile Content Container -->
+            <div id="profile-container" class="pb-20"></div>
+        </section>
+
+        <!-- Profile Search Section -->
+        <section id="profile-search" class="tab-content">
+            <div class="flex justify-between items-center mb-6">
+                <button onclick="location.hash='#profile'" class="flex items-center gap-2 text-blue-400 font-medium p-2 -ml-2 rounded-lg hover:bg-white/5 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    Back to Profile
+                </button>
+            </div>
+            <h2 class="text-2xl google-sans mb-4">Search Profiles</h2>
+            <div class="flex gap-2 mb-6">
+                <input id="profileSearchInput" type="text" placeholder="Search by username..." class="flex-1 bg-transparent border border-white/10 focus:border-blue-400">
+                <button onclick="searchProfiles()" class="ripple bg-blue-400 text-blue-950 px-6 py-2 rounded-full font-medium">Go</button>
+            </div>
+            <div id="profileSearchResults" class="space-y-3"></div>
+        </section>
+
+
+        <!-- Focus -->
+        <section id="focus" class="tab-content text-center">
+            <h2 class="text-2xl google-sans mb-8">Focus Timer</h2>
+            <div class="relative w-64 h-64 mx-auto flex items-center justify-center mb-10">
+                <svg class="absolute w-full h-full -rotate-90">
+                    <circle cx="128" cy="128" r="120" stroke="rgba(255,255,255,0.05)" stroke-width="8" fill="transparent"/>
+                    <circle id="timerStroke" cx="128" cy="128" r="120" stroke="var(--md-sys-color-primary)" stroke-width="8" fill="transparent" stroke-dasharray="754" stroke-dashoffset="0" stroke-linecap="round"/>
+                </svg>
+                <div id="timerText" class="text-6xl google-sans font-light tabular-nums">25:00</div>
+            </div>
+            <div class="flex justify-center gap-4">
+                <button id="pomoBtn" onclick="toggleTimer()" class="ripple px-12 py-4 bg-blue-400 text-blue-950 rounded-full font-medium text-lg min-w-[140px]">Start</button>
+                <button onclick="resetTimer()" class="ripple p-4 bg-zinc-800 rounded-full">🔄</button>
+            </div>
+        </section>
+
+        <!-- Planner -->
+        <section id="planner" class="tab-content">
+            <h2 class="text-2xl google-sans mb-4 px-2">Tasks</h2>
+            <div class="flex gap-2 mb-6">
+                <input id="todoInput" type="text" placeholder="Add assignment..." class="flex-1 bg-transparent border border-white/10 focus:border-blue-400">
+                <button onclick="addTodo()" class="ripple bg-blue-400 text-blue-950 px-6 py-2 rounded-full font-medium text-xl">+</button>
+            </div>
+            <div id="todoContainer" class="space-y-2 pb-20"></div>
+        </section>
+
+    </main>
+
+    <nav id="appNav" class="fixed bottom-0 left-0 right-0 h-20 bg-[var(--md-sys-color-surface)] border-t border-white/5 flex items-center justify-around z-40 hidden-force backdrop-blur-lg bg-opacity-90">
+        <a href="#calculator" class="nav-item flex flex-col items-center gap-1">
+            <div class="pill">🧮</div>
+            <span class="text-[11px] font-medium">Math</span>
+        </a>
+        <a href="#graph" class="nav-item flex flex-col items-center gap-1">
+            <div class="pill">📈</div>
+            <span class="text-[11px] font-medium">Graph</span>
+        </a>
+        <a href="#notes" class="nav-item flex flex-col items-center gap-1">
+            <div class="pill">📝</div>
+            <span class="text-[11px] font-medium">Notes</span>
+        </a>
+        <a href="#profile" class="nav-item flex flex-col items-center gap-1">
+            <div class="pill">👤</div>
+            <span class="text-[11px] font-medium">Profile</span>
+        </a>
+        <a href="#planner" class="nav-item flex flex-col items-center gap-1">
+            <div class="pill">📅</div>
+            <span class="text-[11px] font-medium">Plan</span>
+        </a>
+    </nav>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, setDoc, onSnapshot, query, getDoc, getDocs, writeBatch, orderBy, where, limit, startAt, endAt, collectionGroup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+        import { getVertexAI, getGenerativeModel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-vertexai.js";
+
+        // Config
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'scholarflow-dac0e';
+        const firebaseConfig = {
+            apiKey: "AIzaSyDU7L43VOFc39fB3NejDtD4wCalbn-ozac",
+            authDomain: "scholarflow-dac0e.firebaseapp.com",
+            projectId: "scholarflow-dac0e",
+            storageBucket: "scholarflow-dac0e.firebasestorage.app",
+            messagingSenderId: "119040963186",
+            appId: "1:119040963186:web:6bcc2dbcce6ddbda6948eb"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+        const provider = new GoogleAuthProvider();
+
+        // Initialize Vertex AI
+        const vertexAI = getVertexAI(app);
+        const model = getGenerativeModel(vertexAI, { model: "gemini-2.5-flash" });
+
+        let currentUser = null;
+        let currentUserProfile = null; // Store fetched profile data
+        let notes = [];
+        let sharedNotes = [];
+        let todos = [];
+        let timeLeft = 1500, timerId = null;
+        let calcExp = "";
+        let noteViewMode = 'private'; // 'private' | 'public'
+        
+        // App Ready State
+        let isAuthResolved = false;
+        
+        // Attachment State
+        let pendingAttachments = []; 
+        let currentEditingNoteId = null;
+
+        // Comment State
+        let currentNoteComments = [];
+        let unsubscribeComments = null;
+        let replyToId = null; // ID of comment being replied to
+        
+        // Report State
+        let activeReport = null; // { type: 'note' | 'profile', id: string, content: string }
+
+        // Update Loader Message Helper
+        const setBootStatus = (msg) => {
+            const el = document.getElementById('boot-status');
+            if (el) el.innerText = msg;
+        };
+
+        // --- Auth Logic ---
+        window.toggleAuthMethod = (method) => {
+            document.getElementById('socialAuth').style.display = method === 'google' ? 'block' : 'none';
+            document.getElementById('emailForm').style.display = method === 'email' ? 'block' : 'none';
+            const authError = document.getElementById('authError');
+            authError.innerText = "";
+            authError.className = "text-xs mt-4 min-h-[1rem] transition-colors duration-200 text-red-400"; // Reset to red
+        };
+
+        window.signInWithGoogle = async () => {
+            try { await signInWithPopup(auth, provider); }
+            catch (e) { document.getElementById('authError').innerText = e.message; }
+        };
+
+        window.handleEmailAuth = async (type) => {
+            const email = document.getElementById('authEmail').value;
+            const pass = document.getElementById('authPass').value;
+            const authError = document.getElementById('authError');
+            
+            authError.className = "text-xs mt-4 min-h-[1rem] transition-colors duration-200 text-red-400";
+            
+            if (!email || !pass) return;
+            try {
+                if (type === 'signin') await signInWithEmailAndPassword(auth, email, pass);
+                else await createUserWithEmailAndPassword(auth, email, pass);
+            } catch (e) { authError.innerText = e.message; }
+        };
+
+        window.handlePasswordReset = async () => {
+            const email = document.getElementById('authEmail').value;
+            const errorDisplay = document.getElementById('authError');
+            
+            if (!email) {
+                errorDisplay.className = "text-xs mt-4 min-h-[1rem] transition-colors duration-200 text-red-400";
+                errorDisplay.innerText = "Please enter your email address in the field above to reset your password.";
+                return;
+            }
+
+            try {
+                await sendPasswordResetEmail(auth, email);
+                errorDisplay.className = "text-xs mt-4 min-h-[1rem] transition-colors duration-200 text-green-400";
+                errorDisplay.innerText = "Password reset email sent! Please check your inbox.";
+            } catch (e) {
+                errorDisplay.className = "text-xs mt-4 min-h-[1rem] transition-colors duration-200 text-red-400";
+                errorDisplay.innerText = e.message;
+            }
+        }
+
+        window.handleSignOut = () => signOut(auth);
+
+        onAuthStateChanged(auth, async (user) => {
+            setBootStatus("Checking credentials...");
+            
+            if (user) {
+                currentUser = user;
+                
+                // Fetch Profile Logic
+                try {
+                    const profileDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid));
+                    if (profileDoc.exists()) {
+                        currentUserProfile = profileDoc.data();
+                        document.getElementById('current-user-avatar').innerHTML = `<img src="${currentUserProfile.photoURL || 'https://ui-avatars.com/api/?name='+user.displayName}" class="w-full h-full object-cover rounded-full">`
+                    } else {
+                        currentUserProfile = null;
+                        document.getElementById('current-user-avatar').innerText = (user.displayName || user.email || '?')[0].toUpperCase();
+                    }
+                } catch(e) { console.error("Profile fetch error", e); }
+
+                // Show App UI (Hidden behind loader initially)
+                document.getElementById('authOverlay').classList.add('hidden-force');
+                document.getElementById('appHeader').classList.remove('hidden-force');
+                document.getElementById('main-content').classList.remove('hidden-force');
+                document.getElementById('appNav').classList.remove('hidden-force');
+                
+                setBootStatus("Syncing data...");
+                setupRealtimeListeners();
+                
+                // If deep linking to a note or profile, wait slightly
+                if (window.location.hash.startsWith('#notes') || window.location.hash.startsWith('#profiles')) {
+                    await new Promise(r => setTimeout(r, 500));
+                }
+                
+                handleRouting(); 
+                
+            } else {
+                currentUser = null;
+                currentUserProfile = null;
+                // Show Auth UI (Hidden behind loader initially)
+                document.getElementById('authOverlay').classList.remove('hidden-force');
+                document.getElementById('appHeader').classList.add('hidden-force');
+                document.getElementById('main-content').classList.add('hidden-force');
+                document.getElementById('appNav').classList.add('hidden-force');
+            }
+
+            // Reveal UI
+            const loader = document.getElementById('boot-loader');
+            loader.classList.add('loaded');
+            isAuthResolved = true;
+        });
+
+        // --- Sync Logic ---
+        function setupRealtimeListeners() {
+            if (!currentUser) return;
+            const userPath = ['artifacts', appId, 'users', currentUser.uid];
+            const publicPath = ['artifacts', appId, 'public', 'data', 'shared_notes'];
+
+            // Private Notes
+            onSnapshot(collection(db, ...userPath, 'notes'), (snap) => {
+                notes = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                notes.sort((a,b) => b.timestamp - a.timestamp);
+                if(noteViewMode === 'private') renderNotes();
+                if(location.hash.includes('#notes')) handleRouting(); 
+            }, err => console.error(err));
+
+            // Public Notes (Community)
+            onSnapshot(collection(db, ...publicPath), (snap) => {
+                sharedNotes = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                sharedNotes.sort((a,b) => b.timestamp - a.timestamp);
+                if(noteViewMode === 'public') renderNotes();
+                if(location.hash.includes('public')) handleRouting();
+            }, err => console.error(err));
+
+            // Todos
+            onSnapshot(collection(db, ...userPath, 'todos'), (snap) => {
+                todos = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                renderTodos();
+            }, err => console.error(err));
+        }
+
+
+        // --- Profile Management ---
+
+        window.renderProfileUI = async (targetUsername = null) => {
+            const container = document.getElementById('profile-container');
+            const reportBtn = document.getElementById('report-profile-btn');
+            
+            // Hide report button by default
+            reportBtn.classList.add('hidden-force');
+            container.innerHTML = '<div class="spinner mx-auto mt-10"></div>';
+            
+            // 1. Viewing Own Profile (or no username specified)
+            if (!targetUsername && currentUserProfile) {
+                renderOwnProfileEditor(container);
+                return;
+            }
+
+            // 2. New User Setup (No profile, no username specified)
+            if (!targetUsername && !currentUserProfile) {
+                renderProfileSetup(container);
+                return;
+            }
+
+            // 3. Viewing Public Profile
+            if (targetUsername) {
+                const cleanUsername = targetUsername.replace('@', '').toLowerCase();
+                
+                try {
+                    // Check if viewing self via link
+                    if (currentUserProfile && currentUserProfile.username === cleanUsername) {
+                        renderOwnProfileEditor(container);
+                        return;
+                    }
+
+                    // Look up uid
+                    const usernameDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'usernames', cleanUsername));
+                    if (!usernameDoc.exists()) {
+                         container.innerHTML = `<div class="text-center p-8 opacity-50">User @${cleanUsername} not found.</div>`;
+                         return;
+                    }
+
+                    const targetUid = usernameDoc.data().uid;
+                    const profileDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', targetUid));
+                    
+                    if (!profileDoc.exists()) {
+                         container.innerHTML = `<div class="text-center p-8 opacity-50">Profile not initialized.</div>`;
+                         return;
+                    }
+
+                    const profileData = profileDoc.data();
+
+                    // Privacy Check
+                    if (profileData.hidden && targetUid !== currentUser.uid) {
+                        container.innerHTML = `
+                             <div class="material-card text-center p-8">
+                                <div class="text-4xl mb-4">🔒</div>
+                                <h3 class="text-xl font-medium">Profile Hidden</h3>
+                                <p class="opacity-50 mt-2 text-sm">This user has set their profile to private.</p>
+                             </div>
+                        `;
+                        return;
+                    }
+
+                    // Show report button if it's not me
+                    reportBtn.classList.remove('hidden-force');
+                    // Setup active report data for profile
+                    activeReport = { 
+                        type: 'profile', 
+                        id: targetUid, 
+                        content: `Name: ${profileData.displayName}\nBio: ${profileData.bio}` 
+                    };
+
+                    // Check Flagged Status
+                    if (profileData.flagged) {
+                         container.innerHTML = `
+                            <div class="material-card p-6">
+                                <div class="profile-avatar-xl" style="width: 80px; height: 80px; margin-top: 0; margin-left: 0; margin-bottom: 20px;">
+                                    ${profileData.photoURL ? `<img src="${profileData.photoURL}" alt="avatar">` : (profileData.displayName || '?')[0]}
+                                </div>
+                                <div class="flagged-overlay">
+                                    <div class="text-4xl">⚠️</div>
+                                    <div class="flagged-title">Profile Flagged</div>
+                                    <p class="text-sm opacity-90">This profile is currently hidden due to a community guideline violation.</p>
+                                </div>
+                            </div>
+                         `;
+                         return;
+                    }
+
+                    // Render Public View
+                    container.innerHTML = `
+                         <div class="material-card relative overflow-hidden">
+                            <div class="profile-header-bg"></div>
+                            <div class="profile-avatar-xl">
+                                ${profileData.photoURL ? `<img src="${profileData.photoURL}" alt="avatar">` : (profileData.displayName || '?')[0]}
+                            </div>
+                            <div class="px-5 pb-5 pt-3">
+                                <h3 class="text-2xl font-bold">${profileData.displayName}</h3>
+                                <p class="text-blue-400 mb-4">@${profileData.username}</p>
+                                <p class="opacity-80 leading-relaxed whitespace-pre-wrap">${profileData.bio || 'No bio available.'}</p>
+                            </div>
+                        </div>
+                    `;
+
+                } catch(e) {
+                    console.error(e);
+                    container.innerHTML = `<div class="text-center p-8 text-red-400">Error loading profile.</div>`;
+                }
+            }
+        };
+
+        function renderProfileSetup(container) {
+            container.innerHTML = `
+                <div class="material-card space-y-4">
+                    <h3 class="text-xl font-bold">Create Profile</h3>
+                    <p class="text-sm opacity-60">Choose a permanent username to get started.</p>
+                    
+                    <div>
+                        <label class="text-xs uppercase font-bold opacity-50 ml-1">Username (Permanent)</label>
+                        <input id="setup-username" type="text" placeholder="username" class="w-full mt-1 font-mono" oninput="this.value = this.value.toLowerCase().replace(/[^a-z0-9_]/g,'')">
+                    </div>
+                    
+                    <div>
+                        <label class="text-xs uppercase font-bold opacity-50 ml-1">Display Name</label>
+                        <input id="setup-displayname" type="text" placeholder="Your Name" class="w-full mt-1" value="${currentUser.displayName || ''}">
+                    </div>
+                    
+                    <div>
+                        <label class="text-xs uppercase font-bold opacity-50 ml-1">Bio</label>
+                        <textarea id="setup-bio" placeholder="Tell us about yourself..." class="w-full mt-1 h-24"></textarea>
+                    </div>
+
+                    <div class="text-[10px] opacity-40">Profile content is AI-moderated.</div>
+
+                    <button onclick="createProfile()" id="btn-create-profile" class="w-full bg-blue-400 text-blue-950 py-3 rounded-xl font-bold ripple mt-4">Create Profile</button>
+                </div>
+            `;
+        }
+
+        function renderOwnProfileEditor(container) {
+            const p = currentUserProfile;
+            
+            let flaggedBanner = '';
+            if (p.flagged) {
+                flaggedBanner = `
+                    <div class="bg-red-900/30 border border-red-500/30 text-red-300 p-4 rounded-xl mb-4 text-sm">
+                        <strong>⚠️ Your profile has been flagged.</strong><br>
+                        It is currently hidden from the community. Edit your bio or display name to remove the violation and restore your profile visibility.
+                    </div>
+                `;
+            }
+
+            container.innerHTML = `
+                ${flaggedBanner}
+                <div class="material-card relative mb-6">
+                    <div class="flex items-center gap-4 mb-6">
+                        <div class="relative w-20 h-20">
+                            <img src="${p.photoURL || `https://ui-avatars.com/api/?name=${p.displayName}`}" class="w-full h-full rounded-full object-cover bg-zinc-800" id="preview-avatar">
+                            <button onclick="document.getElementById('avatar-upload').click()" class="absolute bottom-0 right-0 bg-blue-400 text-blue-950 rounded-full p-1.5 shadow-lg border-2 border-[var(--md-sys-color-secondary-container)]">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                            </button>
+                            <input type="file" id="avatar-upload" class="hidden" accept="image/*" onchange="handleAvatarUpload(this)">
+                        </div>
+                        <div class="flex-1 overflow-hidden">
+                             <h3 class="font-bold text-lg truncate">${p.displayName}</h3>
+                             <p class="text-sm opacity-50 truncate">@${p.username}</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-xs uppercase font-bold opacity-50 ml-1">Display Name</label>
+                            <input id="edit-displayname" type="text" class="w-full mt-1" value="${p.displayName || ''}">
+                        </div>
+                        <div>
+                            <label class="text-xs uppercase font-bold opacity-50 ml-1">Bio</label>
+                            <textarea id="edit-bio" class="w-full mt-1 h-24">${p.bio || ''}</textarea>
+                        </div>
+                        
+                        <div class="flex items-center justify-between bg-black/10 p-3 rounded-xl border border-white/5">
+                            <div>
+                                <div class="font-medium text-sm">Hide Profile</div>
+                                <div class="text-[10px] opacity-50">Only you can see your profile page</div>
+                            </div>
+                            <button onclick="toggleProfileVisibility()" id="btn-visibility" class="w-12 h-6 rounded-full transition-colors relative ${p.hidden ? 'bg-blue-400' : 'bg-zinc-700'}">
+                                <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${p.hidden ? 'right-1' : 'left-1'}"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2 mt-6">
+                         <button onclick="updateProfile()" id="btn-save-profile" class="flex-1 bg-blue-400 text-blue-950 py-3 rounded-xl font-bold ripple">Save Changes</button>
+                         <button onclick="navigator.clipboard.writeText(window.location.origin + '/#profiles/@' + '${p.username}'); alert('Profile link copied!')" class="flex-1 bg-zinc-800 py-3 rounded-xl font-bold ripple">Share Link</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.createProfile = async () => {
+            const btn = document.getElementById('btn-create-profile');
+            const username = document.getElementById('setup-username').value.trim().toLowerCase();
+            const displayName = document.getElementById('setup-displayname').value.trim();
+            const bio = document.getElementById('setup-bio').value.trim();
+
+            if (username.length < 3) return alert("Username too short.");
+            if (!displayName) return alert("Display name required.");
+
+            btn.disabled = true;
+            btn.innerHTML = "Processing...";
+
+            try {
+                // AI Moderation for Profile Content
+                const contentToCheck = `${displayName} ${bio}`;
+                const isSafe = await checkContentSafety(contentToCheck);
+                if (!isSafe) {
+                    alert("Profile creation blocked: Content detected as potentially unsafe/harmful by AI moderation.");
+                    btn.disabled = false;
+                    btn.innerHTML = "Create Profile";
+                    return;
+                }
+
+                // Check availability
+                const usernameRef = doc(db, 'artifacts', appId, 'public', 'data', 'usernames', username);
+                const snap = await getDoc(usernameRef);
+                
+                if (snap.exists()) {
+                    alert("Username already taken.");
+                    btn.disabled = false;
+                    btn.innerHTML = "Create Profile";
+                    return;
+                }
+
+                btn.innerHTML = "Creating...";
+
+                // Create
+                const batch = writeBatch(db);
+                batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', currentUser.uid), {
+                    username, displayName, bio, photoURL: currentUser.photoURL || '', hidden: false, uid: currentUser.uid, flagged: false
+                });
+                batch.set(usernameRef, { uid: currentUser.uid });
+                
+                await batch.commit();
+                
+                // Update local state force reload
+                const profileDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', currentUser.uid));
+                currentUserProfile = profileDoc.data();
+                
+                renderProfileUI();
+
+            } catch(e) {
+                console.error(e);
+                alert("Creation failed.");
+                btn.disabled = false;
+                btn.innerHTML = "Create Profile";
+            }
+        };
+
+        // --- Sync Helper ---
+        async function syncUserIdentity(data) {
+            // data = { displayName, photoURL, username }
+            if (!currentUser) return;
+            const uid = currentUser.uid;
+            
+            setBootStatus("Syncing changes across app...");
+            const batch = writeBatch(db);
+            let count = 0;
+            const MAX_BATCH = 450; 
+
+            try {
+                // 1. Update Notes
+                const notesQuery = query(
+                    collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'),
+                    where('authorId', '==', uid)
+                );
+                const notesSnap = await getDocs(notesQuery);
+                notesSnap.forEach(doc => {
+                    if (count < MAX_BATCH) {
+                        batch.update(doc.ref, {
+                            author: data.displayName,
+                            authorUsername: data.username
+                        });
+                        count++;
+                    }
+                });
+
+                // 2. Update Comments
+                const commentsQuery = query(
+                    collectionGroup(db, 'comments'), 
+                    where('authorId', '==', uid)
+                );
+                
+                const commentsSnap = await getDocs(commentsQuery);
+                commentsSnap.forEach(doc => {
+                    if (doc.ref.path.includes(appId) && count < MAX_BATCH) {
+                        batch.update(doc.ref, {
+                            authorName: data.displayName,
+                            authorAvatar: data.photoURL,
+                            authorUsername: data.username
+                        });
+                        count++;
+                    }
+                });
+
+                if (count > 0) {
+                    await batch.commit();
+                }
+            } catch (e) {
+                console.warn("Sync warning:", e);
+            }
+            setBootStatus(""); 
+        }
+
+        window.updateProfile = async () => {
+            const btn = document.getElementById('btn-save-profile');
+            const displayName = document.getElementById('edit-displayname').value.trim();
+            const bio = document.getElementById('edit-bio').value.trim();
+            
+            btn.disabled = true;
+            btn.innerText = "Checking...";
+
+            try {
+                 // AI Moderation for Update
+                const contentToCheck = `${displayName} ${bio}`;
+                const isSafe = await checkContentSafety(contentToCheck);
+                if (!isSafe) {
+                    alert("Update blocked: Content detected as potentially unsafe/harmful.");
+                    btn.disabled = false;
+                    btn.innerText = "Save Changes";
+                    return;
+                }
+
+                // If it was flagged, this edit restores it
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', currentUser.uid), {
+                    displayName, bio, flagged: false // Restore if previously flagged
+                });
+                
+                currentUserProfile.displayName = displayName;
+                currentUserProfile.bio = bio;
+                currentUserProfile.flagged = false;
+                
+                // --- SYNC CHANGES EVERYWHERE ---
+                btn.innerText = "Syncing...";
+                await syncUserIdentity(currentUserProfile);
+                
+                renderProfileUI(); // Re-render to clear flags
+                alert("Profile updated and synced!");
+            } catch(e) {
+                console.error(e);
+                alert("Update failed.");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Save Changes";
+            }
+        };
+
+        window.toggleProfileVisibility = async () => {
+            if (!currentUserProfile) return;
+            const newVal = !currentUserProfile.hidden;
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', currentUser.uid), {
+                hidden: newVal
+            });
+            currentUserProfile.hidden = newVal;
+            renderOwnProfileEditor(document.getElementById('profile-container'));
+        };
+
+        window.handleAvatarUpload = async (input) => {
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                const storageRef = ref(storage, `users/${currentUser.uid}/avatar/profile.jpg`);
+                
+                // Optimistic UI
+                const reader = new FileReader();
+                reader.onload = e => document.getElementById('preview-avatar').src = e.target.result;
+                reader.readAsDataURL(file);
+
+                try {
+                    await uploadBytes(storageRef, file);
+                    const url = await getDownloadURL(storageRef);
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', currentUser.uid), {
+                        photoURL: url
+                    });
+                    currentUserProfile.photoURL = url;
+                    await syncUserIdentity(currentUserProfile);
+
+                } catch(e) {
+                    console.error(e);
+                    alert("Avatar upload failed.");
+                }
+            }
+        };
+
+        // --- Search Profiles ---
+        window.searchProfiles = async () => {
+            const q = document.getElementById('profileSearchInput').value.trim().toLowerCase();
+            const resContainer = document.getElementById('profileSearchResults');
+            resContainer.innerHTML = '<div class="spinner"></div>';
+
+            if (!q) return;
+
+            try {
+                // Search by username prefix
+                const qRef = query(
+                    collection(db, 'artifacts', appId, 'public', 'data', 'profiles'),
+                    where('username', '>=', q),
+                    where('username', '<=', q + '\uf8ff'),
+                    limit(10)
+                );
+                
+                const snap = await getDocs(qRef);
+                
+                if (snap.empty) {
+                    resContainer.innerHTML = '<div class="text-center opacity-50 py-4">No profiles found.</div>';
+                    return;
+                }
+
+                resContainer.innerHTML = snap.docs.map(d => {
+                    const data = d.data();
+                    if (data.hidden || data.flagged) return ''; // Skip hidden or flagged in search
+                    return `
+                        <div onclick="location.hash='#profiles/@${data.username}'" class="flex items-center gap-3 p-3 bg-zinc-800 rounded-xl cursor-pointer ripple">
+                            <div class="w-10 h-10 rounded-full bg-zinc-600 overflow-hidden flex items-center justify-center">
+                                ${data.photoURL ? `<img src="${data.photoURL}" class="w-full h-full object-cover">` : (data.displayName[0] || '?')}
+                            </div>
+                            <div>
+                                <div class="font-bold text-sm">${data.displayName}</div>
+                                <div class="text-xs opacity-50">@${data.username}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch(e) {
+                console.error(e);
+                resContainer.innerHTML = 'Error searching.';
+            }
+        };
+
+
+        // --- AI Moderation Logic ---
+        
+        // 1. Basic Content Check (Creation/Edit)
+        async function checkContentSafety(text) {
+            try {
+                if (!text || text.length < 2) return true;
+                const prompt = `You are a strict content moderator for a student community. Analyze the following text. If the text contains hate speech, severe profanity, sexually explicit content, harassment, or dangerous instructions, respond with "UNSAFE". Otherwise "SAFE". Text: "${text}"`;
+                const result = await model.generateContent(prompt);
+                const response = await result.response;
+                const decision = response.text().trim().toUpperCase();
+                return decision.includes("SAFE") && !decision.includes("UNSAFE");
+            } catch (e) {
+                console.error("Moderation check failed", e);
+                return true; 
+            }
+        }
+
+        // 2. Context-Aware Reporting Logic (The "Second Pass")
+        window.initProfileReport = () => {
+             document.getElementById('reportModal').classList.add('active');
+             // activeReport already set in renderProfileUI
+        };
+        
+        window.closeReportModal = () => {
+             document.getElementById('reportModal').classList.remove('active');
+             document.getElementById('report-reason').value = "";
+             activeReport = null;
+        };
+
+        window.submitReport = async () => {
+             const reason = document.getElementById('report-reason').value.trim();
+             const btn = document.getElementById('btn-submit-report');
+             
+             if (!activeReport) return closeReportModal();
+
+             btn.innerHTML = "Analyzing...";
+             btn.disabled = true;
+
+             try {
+                // Determine Violative Status using User Reason + AI
+                const prompt = `
+                    You are a content moderator. A user has reported content as violative.
+                    
+                    The user provided this explanation/context for why it is bad: "${reason || 'No specific reason provided'}"
+                    
+                    The content in question is:
+                    "${activeReport.content}"
+                    
+                    Analyze the content. Use the user's explanation to understand slang or hidden context.
+                    If the content is indeed violative (harassment, hate speech, explicit, dangerous, or offensive slang), respond strictly with "VIOLATIVE".
+                    If it is benign, respond with "SAFE".
+                `;
+
+                const result = await model.generateContent(prompt);
+                const response = await result.response;
+                const decision = response.text().trim().toUpperCase();
+                
+                if (decision.includes("VIOLATIVE")) {
+                    // Update Firestore to Flag content
+                    if (activeReport.type === 'note') {
+                         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', activeReport.id), {
+                             flagged: true,
+                             flaggedReason: reason || "Community Violation"
+                         });
+                    } else if (activeReport.type === 'profile') {
+                         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', activeReport.id), {
+                             flagged: true
+                         });
+                    }
+                    alert("Report accepted. Content has been flagged and hidden.");
+                    // Reload current view
+                    handleRouting();
+                } else {
+                    alert("AI Review complete: Content determined to be safe based on current guidelines.");
+                }
+
+             } catch(e) {
+                 console.error(e);
+                 alert("Error submitting report. Please try again.");
+             } finally {
+                 btn.innerHTML = "Submit Report";
+                 btn.disabled = false;
+                 closeReportModal();
+             }
+        };
+
+
+        // --- Comment Logic ---
+
+        async function setupCommentsListener(noteId) {
+            if (unsubscribeComments) unsubscribeComments();
+            
+            const commentsPath = collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId, 'comments');
+            
+            unsubscribeComments = onSnapshot(commentsPath, (snap) => {
+                currentNoteComments = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                // Sort by time
+                currentNoteComments.sort((a,b) => a.timestamp - b.timestamp);
+                renderComments();
+                document.getElementById('comment-count').innerText = currentNoteComments.length;
+            });
+        }
+
+        window.renderComments = () => {
+            const container = document.getElementById('comments-list');
+            container.innerHTML = "";
+            
+            // Separate parents and replies
+            const parents = currentNoteComments.filter(c => !c.parentId);
+            const replies = currentNoteComments.filter(c => c.parentId);
+
+            if (parents.length === 0) {
+                container.innerHTML = `<div class="text-center text-xs opacity-40 py-8">No comments yet. Be the first!</div>`;
+                return;
+            }
+
+            parents.forEach(parent => {
+                const parentEl = createCommentElement(parent, false);
+                container.appendChild(parentEl);
+
+                // Find children
+                const children = replies.filter(r => r.parentId === parent.id);
+                if (children.length > 0) {
+                    const replyContainer = document.createElement('div');
+                    replyContainer.className = "ml-8 space-y-3 relative reply-line pt-2";
+                    children.forEach(child => {
+                        const childEl = createCommentElement(child, true);
+                        const curve = document.createElement('div');
+                        curve.className = 'reply-curve';
+                        childEl.prepend(curve);
+                        replyContainer.appendChild(childEl);
+                    });
+                    container.appendChild(replyContainer);
+                }
+            });
+        }
+
+        function createCommentElement(comment, isReply) {
+            const isMe = currentUser && currentUser.uid === comment.authorId;
+            // Need reference to current note to check owner rights
+            const noteId = location.hash.split('/')[1];
+            const note = sharedNotes.find(n => n.id === noteId);
+            const isOwner = note && currentUser && note.authorId === currentUser.uid;
+
+            const div = document.createElement('div');
+            div.className = "comment-thread flex gap-3";
+            
+            div.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center font-bold text-xs shrink-0 select-none border border-white/10 overflow-hidden cursor-pointer" onclick="location.hash='#profiles/@${comment.authorUsername || 'unknown'}'">
+                    ${comment.authorAvatar ? `<img src="${comment.authorAvatar}" class="w-full h-full object-cover">` : (comment.authorName ? comment.authorName[0].toUpperCase() : '?')}
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-baseline gap-2 mb-1">
+                        <span class="font-bold text-sm ${comment.authorId === note?.authorId ? 'text-blue-400' : ''} cursor-pointer hover:underline" onclick="location.hash='#profiles/@${comment.authorUsername || 'unknown'}'">
+                            ${comment.authorName || 'Anonymous'}
+                        </span>
+                        ${comment.authorId === note?.authorId ? '<span class="text-[10px] bg-blue-900/30 text-blue-400 px-1.5 rounded uppercase tracking-wider">Owner</span>' : ''}
+                        <span class="text-[10px] opacity-40">${new Date(comment.timestamp).toLocaleDateString()}</span>
+                    </div>
+                    <div class="text-sm opacity-90 leading-relaxed break-words whitespace-pre-wrap">${comment.text}</div>
+                    
+                    <div class="flex gap-4 mt-2">
+                        ${(!note?.commentsLocked || isOwner) ? `<button onclick="initReply('${comment.id}', '${comment.authorName}')" class="text-[11px] opacity-50 hover:opacity-100 hover:text-blue-400 font-medium transition-colors">Reply</button>` : ''}
+                        ${(isMe || isOwner) ? `<button onclick="deleteComment('${comment.id}')" class="text-[11px] opacity-40 hover:opacity-100 hover:text-red-400 transition-colors">Delete</button>` : ''}
+                    </div>
+                </div>
+            `;
+            return div;
+        }
+
+        window.initReply = (id, name) => {
+            replyToId = id;
+            const banner = document.getElementById('replying-banner');
+            banner.classList.remove('hidden');
+            banner.querySelector('span').innerText = `Replying to ${name}...`;
+            document.getElementById('new-comment-text').focus();
+        }
+
+        window.cancelReply = () => {
+            replyToId = null;
+            document.getElementById('replying-banner').classList.add('hidden');
+        }
+
+        window.postComment = async () => {
+            const input = document.getElementById('new-comment-text');
+            const text = input.value.trim();
+            const noteId = location.hash.split('/')[1];
+            
+            if (!text || !currentUser || !noteId) return;
+
+            // AI Moderation for Comments
+            const isSafe = await checkContentSafety(text);
+            if (!isSafe) {
+                alert("Comment blocked: Content detected as unsafe/harmful.");
+                return;
+            }
+
+            // Optimistic clear
+            input.value = "";
+            const currentReplyId = replyToId;
+            cancelReply();
+
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId, 'comments'), {
+                    text: text,
+                    authorId: currentUser.uid,
+                    authorName: currentUser.displayName || currentUser.email.split('@')[0],
+                    authorUsername: currentUserProfile ? currentUserProfile.username : null, // Add username link
+                    authorAvatar: currentUserProfile ? currentUserProfile.photoURL : null,
+                    timestamp: Date.now(),
+                    parentId: currentReplyId
+                });
+            } catch(e) {
+                console.error("Post failed", e);
+                input.value = text; // Restore on fail
+                alert("Failed to post comment.");
+            }
+        }
+
+        window.deleteComment = async (commentId) => {
+            if (!confirm("Delete this comment?")) return;
+            const noteId = location.hash.split('/')[1];
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId, 'comments', commentId));
+            } catch(e) {
+                console.error(e);
+                alert("Could not delete comment.");
+            }
+        }
+
+        window.toggleCommentLock = async () => {
+            const noteId = location.hash.split('/')[1];
+            const note = sharedNotes.find(n => n.id === noteId);
+            if (!note) return;
+            
+            const newStatus = !note.commentsLocked;
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId), {
+                commentsLocked: newStatus
+            });
+        }
+
+        window.toggleDisableComments = async () => {
+            const noteId = location.hash.split('/')[1];
+            const note = sharedNotes.find(n => n.id === noteId);
+            if (!note) return;
+
+            const newStatus = !note.commentsDisabled;
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId), {
+                commentsDisabled: newStatus
+            });
+        }
+
+
+        // --- Note Actions ---
+        window.switchNoteView = (mode) => {
+            noteViewMode = mode;
+            document.getElementById('btn-private').className = `segment-btn ${mode === 'private' ? 'active' : ''}`;
+            document.getElementById('btn-public').className = `segment-btn ${mode === 'public' ? 'active' : ''}`;
+            document.getElementById('private-input-area').style.display = mode === 'private' ? 'block' : 'none';
+            renderNotes();
+        };
+
+        // --- Attachment Handling ---
+        window.handleFileSelect = (input) => {
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                if (pendingAttachments.some(f => f.name === file.name)) {
+                    alert("This file is already attached.");
+                    input.value = "";
+                    return;
+                }
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    pendingAttachments.push({
+                        id: crypto.randomUUID(), 
+                        name: file.name,
+                        type: file.type,
+                        file: file, 
+                        preview: e.target.result 
+                    });
+                    renderPendingAttachments();
+                    input.value = "";
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+
+        window.removePendingAttachment = (index) => {
+            pendingAttachments.splice(index, 1);
+            renderPendingAttachments();
+        };
+
+        function renderPendingAttachments() {
+            const container = document.getElementById('pending-attachments');
+            if (pendingAttachments.length === 0) {
+                container.innerHTML = "";
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+            container.innerHTML = pendingAttachments.map((file, idx) => `
+                <div class="attachment-tag">
+                    <span class="truncate max-w-[150px]">${file.name}</span>
+                    <button onclick="removePendingAttachment(${idx})" title="Remove">✕</button>
+                </div>
+            `).join('');
+        }
+
+        // --- Saving Notes ---
+        async function uploadFileToStorage(userId, fileObject, fileId) {
+            const path = `users/${userId}/attachments/${fileId}_${fileObject.name}`;
+            const storageRef = ref(storage, path);
+            await uploadBytes(storageRef, fileObject);
+            const url = await getDownloadURL(storageRef);
+            return { url: url, storagePath: path };
+        }
+
+        window.saveNote = async () => {
+            const btn = document.getElementById('saveNoteBtn');
+            const val = document.getElementById('noteInput').value.trim();
+            
+            if ((!val && pendingAttachments.length === 0) || !currentUser) return;
+            
+            btn.disabled = true;
+            const originalBtnText = btn.innerHTML;
+            btn.innerHTML = `<div class="spinner"></div>`;
+
+            try {
+                let attachmentsMeta = [];
+                
+                if (pendingAttachments.length > 0) {
+                    for (const item of pendingAttachments) {
+                        const fileId = item.id;
+                        const uploadResult = await uploadFileToStorage(currentUser.uid, item.file, fileId);
+                        attachmentsMeta.push({
+                            id: fileId,
+                            name: item.name,
+                            type: item.type,
+                            url: uploadResult.url,
+                            storagePath: uploadResult.storagePath
+                        });
+                    }
+                }
+
+                // Add Note with basic author info (username might be null if not set)
+                await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'notes'), {
+                    text: val, 
+                    date: new Date().toLocaleString(), 
+                    timestamp: Date.now(), 
+                    shared: false,
+                    attachments: attachmentsMeta,
+                    flagged: false
+                });
+
+                document.getElementById('noteInput').value = "";
+                pendingAttachments = [];
+                renderPendingAttachments();
+
+            } catch (e) {
+                console.error(e);
+                alert("Error saving note: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalBtnText;
+            }
+        };
+
+        // --- Note Editing Logic ---
+        window.saveEditNote = async () => {
+             const note = notes.find(n => n.id === currentEditingNoteId);
+             if(!note) return;
+
+             const val = document.getElementById('note-edit-area').value.trim();
+             const btn = document.getElementById('update-note-btn');
+             btn.disabled = true;
+             btn.innerText = "Saving...";
+
+             try {
+                // If shared, check moderation on edit
+                if (note.shared) {
+                     const isSafe = await checkContentSafety(val);
+                     if (!isSafe) {
+                         alert("Cannot update shared note: Content detected as unsafe. Unshare the note to save this version privately.");
+                         btn.disabled = false;
+                         btn.innerText = "Save";
+                         return;
+                     }
+                }
+
+                 // Update Private
+                 await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', currentEditingNoteId), {
+                     text: val, 
+                     date: new Date().toLocaleString(),
+                     flagged: false // Edit restores visibility if flagged
+                 });
+
+                 // Update Public if shared
+                 if(note.shared) {
+                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', currentEditingNoteId), {
+                         text: val,
+                         date: new Date().toLocaleString(),
+                         flagged: false // Edit restores visibility
+                     });
+                 }
+
+                 location.hash = `#notes/${currentEditingNoteId}`;
+
+             } catch(e) {
+                 console.error(e);
+                 alert("Save failed");
+             } finally {
+                 btn.disabled = false;
+                 btn.innerText = "Save";
+             }
+        };
+
+        // --- Delete/Update Actions ---
+        window.deleteNote = async (id) => {
+            const note = notes.find(n => n.id === id);
+            if (!note) return;
+            if (note.shared) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', id));
+            await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', id));
+        };
+
+        // --- Sharing Logic with Profile Link Support ---
+        window.toggleNoteShare = async (id) => {
+            const note = notes.find(n => n.id === id);
+            if (!note) return;
+
+            // Enforce Profile Creation before Sharing
+            if (!currentUserProfile) {
+                if(confirm("You must create a profile (username) before sharing notes. Go to Profile?")) {
+                    location.hash = '#profile';
+                }
+                return;
+            }
+
+            const btn = document.getElementById('share-note-btn');
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = '<div class="spinner"></div>';
+
+            const newStatus = !note.shared;
+            
+            if (newStatus === true) {
+                // AI Moderation for Notes
+                const isSafe = await checkContentSafety(note.text);
+                if (!isSafe) {
+                    alert("Cannot share note: Content violates safety guidelines.");
+                    btn.innerHTML = originalContent;
+                    return;
+                }
+            }
+
+            const publicNoteRef = doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', id);
+            
+            try {
+                await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', id), { shared: newStatus });
+                
+                if (newStatus) {
+                    await setDoc(publicNoteRef, {
+                        text: note.text,
+                        date: note.date,
+                        timestamp: note.timestamp,
+                        author: currentUserProfile.displayName,
+                        authorUsername: currentUserProfile.username, 
+                        authorId: currentUser.uid,
+                        attachments: note.attachments || [],
+                        commentsLocked: false,
+                        commentsDisabled: false,
+                        flagged: false
+                    });
+                } else {
+                    await deleteDoc(publicNoteRef);
+                }
+            } catch(e) {
+                console.error("Share error", e);
+                await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', id), { shared: !newStatus });
+                alert("Could not update share status.");
+            }
+        };
+
+        // --- Planner Actions ---
+        window.addTodo = async () => {
+            const val = document.getElementById('todoInput').value.trim();
+            if (!val || !currentUser) return;
+            await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'todos'), {
+                text: val, done: false, timestamp: Date.now()
+            });
+            document.getElementById('todoInput').value = "";
+        };
+
+        window.toggleTodo = async (id) => {
+            const todo = todos.find(t => t.id === id);
+            await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'todos', id), { done: !todo.done });
+        };
+
+        // --- Rendering ---
+        window.renderNotes = () => {
+            const container = document.getElementById('notesContainer');
+            const list = noteViewMode === 'private' ? notes : sharedNotes;
+            
+            if (list.length === 0) {
+                container.innerHTML = `<div class="p-8 text-center opacity-40">No ${noteViewMode === 'private' ? 'private' : 'community'} notes found.</div>`;
+                return;
+            }
+
+            container.innerHTML = list.map(n => {
+                // If it's a flagged note in public list, show badge
+                let contentPreview = n.text.split('\n')[0] || 'Untitled';
+                if (n.flagged && noteViewMode === 'public') {
+                    contentPreview = '<span class="text-red-400 italic">⚠️ Content Flagged</span>';
+                }
+
+                return `
+                <div class="material-card flex justify-between gap-4 cursor-pointer ripple" onclick="location.hash='#notes/${n.id}${noteViewMode === 'public' ? '/public' : ''}'">
+                    <div class="flex-1 overflow-hidden">
+                        ${noteViewMode === 'public' ? `<p class="text-[10px] text-blue-400 font-bold mb-1 uppercase tracking-wider">${n.author || 'Anonymous'}</p>` : ''}
+                        <div class="flex items-start gap-2">
+                             ${n.attachments && n.attachments.length > 0 ? '<span class="text-lg">📎</span>' : ''}
+                             <p class="truncate font-medium">${contentPreview}</p>
+                        </div>
+                        <p class="text-xs opacity-50 mt-1 flex items-center gap-2">
+                            ${n.date}
+                            ${(noteViewMode === 'private' && n.shared) ? '<span class="text-green-400">● Shared</span>' : ''}
+                        </p>
+                    </div>
+                    ${noteViewMode === 'private' ? `
+                    <button onclick="event.stopPropagation(); deleteNote('${n.id}')" class="p-2 opacity-30 hover:opacity-100 text-red-400">✕</button>
+                    ` : ''}
+                </div>
+            `}).join('');
+        };
+
+        window.renderTodos = () => {
+            const container = document.getElementById('todoContainer');
+            container.innerHTML = todos.map(t => `
+                <div onclick="toggleTodo('${t.id}')" class="flex items-center gap-4 p-4 ripple material-card cursor-pointer">
+                    <div class="w-6 h-6 border-2 border-blue-400 rounded-lg flex items-center justify-center transition-colors ${t.done ? 'bg-blue-400' : ''}">
+                        ${t.done ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+                    </div>
+                    <span class="${t.done ? 'line-through opacity-40' : ''} font-medium">${t.text}</span>
+                </div>
+            `).join('');
+        };
+
+        // --- Navigation ---
+        window.handleRouting = () => {
+            const hash = window.location.hash || '#calculator';
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            
+            if (unsubscribeComments && !hash.includes('public')) {
+                unsubscribeComments();
+                unsubscribeComments = null;
+            }
+
+            // Profile Routes
+            if (hash.startsWith('#profiles/search')) {
+                document.getElementById('profile-search').classList.add('active');
+                return;
+            }
+            if (hash.startsWith('#profiles/@')) {
+                const username = hash.split('@')[1];
+                document.getElementById('profile').classList.add('active');
+                renderProfileUI(username);
+                return;
+            }
+            if (hash === '#profile') {
+                document.getElementById('profile').classList.add('active');
+                renderProfileUI(null); // Own profile
+                updateNavState('#profile');
+                return;
+            }
+
+            // Note Routes
+            if (hash.startsWith('#notes/')) {
+                const parts = hash.split('/');
+                const id = parts[1];
+                const mode = parts[2]; 
+                
+                if (mode === 'edit') renderNoteEdit(id);
+                else if (mode === 'public') renderPublicNoteDetail(id);
+                else renderNoteDetail(id);
+                return;
+            }
+
+            const activeTab = document.querySelector(hash);
+            if(activeTab) {
+                activeTab.classList.add('active');
+                if (hash === '#graph') {
+                    setTimeout(() => requestAnimationFrame(drawGraph), 100);
+                }
+            }
+
+            updateNavState(hash);
+        };
+
+        function updateNavState(hash) {
+            document.querySelectorAll('.nav-item').forEach(item => {
+                const href = item.getAttribute('href');
+                if(href === hash || (hash.startsWith('#notes') && href === '#notes')) item.classList.add('active');
+                else item.classList.remove('active');
+            });
+        }
+
+        // --- Note Detail Renderers ---
+        async function renderNoteDetail(id) {
+            const note = notes.find(n => n.id === id);
+            if(!note) { if (isAuthResolved) location.hash = '#notes'; return; }
+            
+            const contentDiv = document.getElementById('note-detail-content');
+            
+            if (note.flagged) {
+                 contentDiv.innerHTML = `
+                    <div class="bg-red-900/30 border border-red-500/30 text-red-300 p-4 rounded-xl mb-4 text-sm">
+                        <strong>⚠️ This shared note has been flagged.</strong><br>
+                        It is hidden from the community. Edit the note to fix violations and restore visibility.
+                    </div>
+                    <div class="opacity-50 blur-[1px] select-none pointer-events-none">${note.text}</div>
+                 `;
+            } else {
+                contentDiv.innerText = note.text;
+            }
+
+            document.getElementById('note-detail-date').innerText = `Last updated: ${note.date}`;
+            document.getElementById('note-detail-author').classList.add('hidden-force');
+            document.getElementById('comments-section').classList.add('hidden-force');
+            document.getElementById('report-note-btn').classList.add('hidden-force');
+            
+            renderAttachments(note);
+            
+            const editBtn = document.getElementById('edit-note-btn');
+            editBtn.classList.remove('hidden-force');
+            editBtn.onclick = () => location.hash = `#notes/${id}/edit`;
+            
+            const shareBtn = document.getElementById('share-note-btn');
+            shareBtn.classList.remove('hidden-force');
+            shareBtn.className = `w-10 h-10 rounded-full flex items-center justify-center ripple transition-colors ${note.shared ? 'bg-green-400 text-green-950' : 'bg-zinc-800 text-blue-400'}`;
+            shareBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
+            shareBtn.onclick = () => toggleNoteShare(id);
+
+            const badge = document.getElementById('shared-badge');
+            if (note.shared) badge.classList.remove('hidden-force'); else badge.classList.add('hidden-force');
+            document.getElementById('note-detail').classList.add('active');
+        }
+
+        async function renderPublicNoteDetail(id) {
+            const note = sharedNotes.find(n => n.id === id);
+            if(!note) { if (isAuthResolved) location.hash = '#notes'; return; }
+            
+            const contentDiv = document.getElementById('note-detail-content');
+            
+            // Check Flagged Status for Viewer
+            if (note.flagged) {
+                contentDiv.innerHTML = `
+                    <div class="flagged-overlay">
+                        <div class="text-4xl">⚠️</div>
+                        <div class="flagged-title">Note Flagged</div>
+                        <p class="text-sm opacity-90">This content is currently hidden due to a community guideline violation.</p>
+                    </div>
+                `;
+            } else {
+                contentDiv.innerText = note.text;
+            }
+
+            document.getElementById('note-detail-date').innerText = `Shared on: ${note.date}`;
+            renderAttachments(note);
+
+            const authorDiv = document.getElementById('note-detail-author');
+            authorDiv.innerText = `By @${note.authorUsername || note.author || 'Anonymous'}`;
+            authorDiv.classList.remove('hidden-force');
+            // Link to profile if username exists
+            if (note.authorUsername) {
+                authorDiv.href = `#profiles/@${note.authorUsername}`;
+                authorDiv.onclick = (e) => { e.preventDefault(); location.hash = `#profiles/@${note.authorUsername}`; };
+            } else {
+                authorDiv.href = "#";
+            }
+
+            document.getElementById('edit-note-btn').classList.add('hidden-force');
+            document.getElementById('share-note-btn').classList.add('hidden-force');
+            document.getElementById('shared-badge').classList.add('hidden-force');
+
+            // Setup Report Button
+            const isOwner = currentUser && note.authorId === currentUser.uid;
+            const reportBtn = document.getElementById('report-note-btn');
+            if (!isOwner) {
+                reportBtn.classList.remove('hidden-force');
+                reportBtn.onclick = () => {
+                     document.getElementById('reportModal').classList.add('active');
+                     activeReport = { type: 'note', id: note.id, content: note.text };
+                };
+            } else {
+                reportBtn.classList.add('hidden-force');
+            }
+
+            // Comment UI
+            const commentSection = document.getElementById('comments-section');
+            const adminControls = document.getElementById('comment-admin-controls');
+            const inputContainer = document.getElementById('comment-input-container');
+            const lockedBanner = document.getElementById('comments-locked-banner');
+
+            if (note.commentsDisabled && !isOwner) {
+                commentSection.classList.add('hidden-force');
+            } else {
+                commentSection.classList.remove('hidden-force');
+                if (isOwner) {
+                    adminControls.classList.remove('hidden-force');
+                    document.getElementById('btn-lock-comments').innerHTML = note.commentsLocked ? '🔒 Unlock' : '🔓 Lock Comments';
+                    document.getElementById('btn-disable-comments').innerHTML = note.commentsDisabled ? '👁️ Show Section' : '🚫 Hide Section';
+                } else {
+                    adminControls.classList.add('hidden-force');
+                }
+
+                if (note.commentsLocked && !isOwner) {
+                    inputContainer.classList.add('hidden-force');
+                    lockedBanner.classList.remove('hidden-force');
+                } else {
+                    inputContainer.classList.remove('hidden-force');
+                    lockedBanner.classList.add('hidden-force');
+                }
+                setupCommentsListener(id);
+            }
+            document.getElementById('note-detail').classList.add('active');
+        }
+
+        function renderNoteEdit(id) {
+            const note = notes.find(n => n.id === id);
+            if(!note) { location.hash = '#notes'; return; }
+            currentEditingNoteId = id;
+            document.getElementById('note-edit-area').value = note.text;
+            
+            // Render read-only existing attachments in edit view
+            const attContainer = document.getElementById('edit-existing-attachments');
+            attContainer.innerHTML = (note.attachments || []).map(a => 
+                `<span class="text-[10px] bg-zinc-800 px-2 py-1 rounded text-white/50">${a.name}</span>`
+            ).join('');
+
+            document.getElementById('cancel-edit-btn').onclick = () => location.hash = `#notes/${id}`;
+            document.getElementById('update-note-btn').onclick = () => saveEditNote(); 
+            document.getElementById('note-edit').classList.add('active');
+        }
+
+        async function renderAttachments(note) {
+             const container = document.getElementById('note-detail-attachments');
+             const list = document.getElementById('attachments-list');
+             list.innerHTML = ''; 
+             if (!note.attachments || note.attachments.length === 0) { container.classList.add('hidden-force'); return; }
+             container.classList.remove('hidden-force');
+             list.innerHTML = note.attachments.map(att => {
+                if (!att.url) return '';
+                if (att.type.startsWith('image/')) return `<img src="${att.url}" class="w-full rounded-lg bg-black/20 border border-white/10" alt="${att.name}" loading="lazy" />`;
+                return `<a href="${att.url}" target="_blank" class="flex items-center gap-3 p-4 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition-colors"><div class="bg-blue-400/20 p-2 rounded text-blue-400">📄</div><div class="flex-1 overflow-hidden"><div class="truncate font-medium">${att.name}</div><div class="text-xs opacity-50 uppercase">Open File</div></div></a>`;
+            }).join('');
+        }
+
+        // --- Calculator ---
+        window.calcInput = (v) => { calcExp += v; renderCalc(); };
+        window.calcClear = () => { calcExp = ""; renderCalc(); };
+        function renderCalc() {
+            document.getElementById('calcExp').innerText = calcExp;
+            document.getElementById('calcDisplay').innerText = calcExp || "0";
+        }
+        window.calcEval = () => {
+            try { 
+                if (/[^0-9+\-*/().]/.test(calcExp)) throw new Error("Invalid");
+                const res = eval(calcExp.replace(/×/g, '*').replace(/÷/g, '/'));
+                if (!isFinite(res) || isNaN(res)) throw new Error("Error");
+                calcExp = res.toString(); 
+                renderCalc();
+            } catch { 
+                calcExp = "";
+                document.getElementById('calcDisplay').innerText = "Error";
+                setTimeout(() => renderCalc(), 1000);
+            }
+        };
+
+        // --- Graphing ---
+        window.setGraph = (eq) => { document.getElementById('graphInput').value = eq; drawGraph(); };
+        window.drawGraph = () => {
+            const canvas = document.getElementById('graphCanvas');
+            const parent = canvas.parentElement;
+            if (parent.clientWidth === 0) return;
+            const w = canvas.width = parent.clientWidth * 2;
+            const h = canvas.height = parent.clientHeight * 2;
+            const ctx = canvas.getContext('2d');
+            const eq = document.getElementById('graphInput').value;
+            ctx.scale(2, 2);
+            const width = w / 2;
+            const height = h / 2;
+            const center = { x: width / 2, y: height / 2 };
+            const scale = 30; 
+            ctx.clearRect(0,0,width,height);
+            ctx.strokeStyle = document.body.classList.contains('light') ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for(let i = center.x % scale; i < width; i+=scale) { ctx.moveTo(i,0); ctx.lineTo(i,height); }
+            for(let i = center.y % scale; i < height; i+=scale) { ctx.moveTo(0,i); ctx.lineTo(width,i); }
+            ctx.stroke();
+            ctx.strokeStyle = document.body.classList.contains('light') ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)';
+            ctx.beginPath();
+            ctx.moveTo(0, center.y); ctx.lineTo(width, center.y);
+            ctx.moveTo(center.x, 0); ctx.lineTo(center.x, height);
+            ctx.stroke();
+            ctx.strokeStyle = '#60a5fa'; 
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            let started = false;
+            for(let px = 0; px < width; px++) {
+                const x = (px - center.x) / scale;
+                try {
+                    const y = new Function('x', `with(Math){return ${eq}}`)(x);
+                    const py = center.y - (y * scale);
+                    if (py < -height || py > height*2) { started = false; continue; }
+                    if(!started) { ctx.moveTo(px, py); started = true; } else ctx.lineTo(px, py);
+                } catch(e) {}
+            }
+            ctx.stroke();
+        };
+
+        // --- Timer ---
+        window.toggleTimer = () => {
+            if(timerId) { clearInterval(timerId); timerId = null; document.getElementById('pomoBtn').innerText = "Start"; }
+            else { timerId = setInterval(() => { if(timeLeft <= 0) resetTimer(); timeLeft--; updateTimerUI(); }, 1000); document.getElementById('pomoBtn').innerText = "Pause"; }
+        };
+        function updateTimerUI() {
+            const m = Math.floor(timeLeft/60), s = timeLeft%60;
+            document.getElementById('timerText').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+            document.getElementById('timerStroke').style.strokeDashoffset = 754 * (1 - timeLeft/1500);
+        }
+        window.resetTimer = () => { clearInterval(timerId); timerId = null; timeLeft = 1500; updateTimerUI(); document.getElementById('pomoBtn').innerText = "Start"; };
+
+        window.toggleTheme = () => {
+            document.body.classList.toggle('light');
+            document.getElementById('themeIcon').innerText = document.body.classList.contains('light') ? '🌙' : '☀️';
+            if(window.location.hash === '#graph') drawGraph();
+        };
+
+        document.addEventListener('mousedown', (e) => {
+            const btn = e.target.closest('.ripple');
+            if (!btn) return;
+            const circle = document.createElement('span');
+            const d = Math.max(btn.clientWidth, btn.clientHeight);
+            const r = btn.getBoundingClientRect();
+            circle.style.width = circle.style.height = `${d}px`;
+            circle.style.left = `${e.clientX - r.left - d/2}px`;
+            circle.style.top = `${e.clientY - r.top - d/2}px`;
+            circle.className = 'ripple-element';
+            btn.appendChild(circle);
+            setTimeout(() => circle.remove(), 600);
+        });
+
+        window.addEventListener('hashchange', handleRouting);
+        window.addEventListener('load', handleRouting);
+        window.addEventListener('resize', () => { if (window.location.hash === '#graph') drawGraph(); });
+    </script>
+</body>
+</html>
+

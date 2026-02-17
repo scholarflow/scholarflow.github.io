@@ -1,0 +1,1 @@
+Remember to fix bottom bar, the focus tab on the bottom bar isn't visible becuase the profile one replaced it. 
