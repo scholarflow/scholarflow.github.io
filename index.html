@@ -364,9 +364,7 @@
         </div>
         <div class="flex items-center gap-3">
             <button onclick="handleSignOut()" class="text-[10px] opacity-40 hover:opacity-100 uppercase tracking-widest font-bold">Logout</button>
-            <button onclick="toggleTheme()" class="p-3 ripple rounded-full">
-                <span id="themeIcon">☀️</span>
-            </button>
+            <button onclick="location.hash='#settings'" class="p-3 ripple rounded-full text-lg" title="Settings">⚙️</button>
         </div>
     </header>
 
@@ -626,6 +624,22 @@
             <div id="todoContainer" class="space-y-2 pb-20"></div>
         </section>
 
+        <!-- Settings -->
+        <section id="settings" class="tab-content">
+            <h2 class="text-2xl google-sans mb-4 px-2">Settings</h2>
+            <div class="material-card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-medium">Theme</p>
+                        <p class="text-xs opacity-60">Switch between light and dark mode</p>
+                    </div>
+                    <button onclick="toggleTheme()" class="px-4 py-2 rounded-full bg-zinc-800 ripple text-sm font-medium">
+                        <span id="themeIcon">☀️</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
     </main>
 
     <nav id="appNav" class="fixed bottom-0 left-0 right-0 h-20 bg-[var(--md-sys-color-surface)] border-t border-white/5 flex items-center justify-around z-40 hidden-force backdrop-blur-lg bg-opacity-90">
@@ -648,6 +662,10 @@
         <a href="#planner" class="nav-item flex flex-col items-center gap-1">
             <div class="pill">📅</div>
             <span class="text-[11px] font-medium">Plan</span>
+        </a>
+        <a href="#settings" class="nav-item flex flex-col items-center gap-1">
+            <div class="pill">⚙️</div>
+            <span class="text-[11px] font-medium">Settings</span>
         </a>
     </nav>
 
@@ -2276,7 +2294,8 @@
 
         window.toggleTheme = () => {
             document.body.classList.toggle('light');
-            document.getElementById('themeIcon').innerText = document.body.classList.contains('light') ? '🌙' : '☀️';
+            const icon = document.getElementById('themeIcon');
+            if (icon) icon.innerText = document.body.classList.contains('light') ? '🌙' : '☀️';
             if(window.location.hash === '#graph') drawGraph();
         };
 
