@@ -702,7 +702,7 @@
         let commentProfilesCache = {}; // uid -> latest public profile data
         
         // Report State
-        let activeReport = null; // { type: 'note' | 'profile', id: string, content: string }
+        let activeReport = null; // { type: 'note' | 'profile' | 'comment', id: string, noteId?: string, content: string }
 
         // Update Loader Message Helper
         const setBootStatus = (msg) => {
@@ -1367,6 +1367,11 @@
                          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', activeReport.id), {
                              flagged: true
                          });
+                    } else if (activeReport.type === 'comment') {
+                         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', activeReport.noteId, 'comments', activeReport.id), {
+                             flagged: true,
+                             flaggedReason: reason || "Community Violation"
+                         });
                     }
                     alert("Report accepted. Content has been flagged and hidden.");
                     // Reload current view
@@ -1477,6 +1482,10 @@
             const div = document.createElement('div');
             div.className = "comment-thread flex gap-3";
             
+            const commentBody = comment.flagged
+                ? `<div class="text-xs text-red-300 bg-red-900/20 border border-red-500/20 rounded-lg p-2">⚠️ This comment has been flagged for review.</div>`
+                : `<div class="text-sm opacity-90 leading-relaxed break-words whitespace-pre-wrap">${comment.text}</div>`;
+
             div.innerHTML = `
                 <div class="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center font-bold text-xs shrink-0 select-none border border-white/10 overflow-hidden cursor-pointer" onclick="location.hash='#profiles/@${comment.authorUsername || 'unknown'}'">
                     ${comment.authorAvatar ? `<img src="${comment.authorAvatar}" class="w-full h-full object-cover">` : (comment.authorName ? comment.authorName[0].toUpperCase() : '?')}
@@ -1489,16 +1498,31 @@
                         ${comment.authorId === note?.authorId ? '<span class="text-[10px] bg-blue-900/30 text-blue-400 px-1.5 rounded uppercase tracking-wider">Owner</span>' : ''}
                         <span class="text-[10px] opacity-40">${new Date(comment.timestamp).toLocaleDateString()}</span>
                     </div>
-                    <div class="text-sm opacity-90 leading-relaxed break-words whitespace-pre-wrap">${comment.text}</div>
+                    ${commentBody}
                     
                     <div class="flex gap-4 mt-2">
-                        ${(!note?.commentsLocked || isOwner) ? `<button onclick="initReply('${comment.id}', '${comment.authorName}')" class="text-[11px] opacity-50 hover:opacity-100 hover:text-blue-400 font-medium transition-colors">Reply</button>` : ''}
+                        ${(!comment.flagged && (!note?.commentsLocked || isOwner)) ? `<button onclick="initReply('${comment.id}', '${comment.authorName}')" class="text-[11px] opacity-50 hover:opacity-100 hover:text-blue-400 font-medium transition-colors">Reply</button>` : ''}
+                        ${(!comment.flagged && !isMe) ? `<button onclick="initCommentReport('${comment.id}')" class="text-[11px] opacity-40 hover:opacity-100 hover:text-amber-400 transition-colors">Report</button>` : ''}
                         ${(isMe || isOwner) ? `<button onclick="deleteComment('${comment.id}')" class="text-[11px] opacity-40 hover:opacity-100 hover:text-red-400 transition-colors">Delete</button>` : ''}
                     </div>
                 </div>
             `;
             return div;
         }
+
+        window.initCommentReport = (commentId) => {
+            const noteId = location.hash.split('/')[1];
+            const comment = currentNoteComments.find(c => c.id === commentId);
+            if (!comment || !noteId) return;
+
+            activeReport = {
+                type: 'comment',
+                id: commentId,
+                noteId,
+                content: comment.text
+            };
+            document.getElementById('reportModal').classList.add('active');
+        };
 
         window.initReply = (id, name) => {
             replyToId = id;
