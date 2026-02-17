@@ -64,6 +64,11 @@ service cloud.firestore {
                       request.auth.uid == userId
                       || isFlaggingAction()
                    );
+
+      // Owner can delete their own public profile record.
+      allow delete: if request.auth != null
+                   && !isBanned()
+                   && request.auth.uid == userId;
     }
 
     // --- B. Usernames ---
@@ -75,7 +80,12 @@ service cloud.firestore {
                     && !isSuspended()
                     && request.resource.data.uid == request.auth.uid;
 
-      allow update, delete: if false;
+      allow update: if false;
+
+      // Owner can delete their own username mapping when deleting profile.
+      allow delete: if request.auth != null
+                    && !isBanned()
+                    && resource.data.uid == request.auth.uid;
     }
 
     // --- C. Shared Notes ---
