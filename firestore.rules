@@ -6,138 +6,169 @@ service cloud.firestore {
     // Helper Functions
     // -----------------------------------------------------------------
 
-    function isBanned() {
-      return exists(/databases/$(database)/documents/artifacts/scholarflow-dac0e/moderation/banned_users/main/$(request.auth.uid));
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    function isSuspended() {
-      return exists(/databases/$(database)/documents/artifacts/scholarflow-dac0e/moderation/suspended_users/main/$(request.auth.uid));
+    function isAdmin(appId) {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/artifacts/$(appId)/moderation/admins/$(request.auth.uid));
     }
 
-    // Check if the user is the owner of the existing document
+    function isBanned(appId) {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/artifacts/$(appId)/moderation/banned_users/$(request.auth.uid));
+    }
+
+    function isSuspended(appId) {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/artifacts/$(appId)/moderation/suspended_users/$(request.auth.uid))
+             && get(/databases/$(database)/documents/artifacts/$(appId)/moderation/suspended_users/$(request.auth.uid)).data.until > request.time;
+    }
+
+    // Check if request.auth.uid owns a resource with authorId or uid.
     function isOwner(resourceData) {
-      return resourceData.authorId == request.auth.uid || (resourceData.uid == request.auth.uid);
+      return isSignedIn() && (resourceData.authorId == request.auth.uid || resourceData.uid == request.auth.uid);
     }
 
-    // Ensure the user cannot change the authorId field during an update
+    // Ensure authorId remains owned by the updater.
     function preservesOwnership() {
       return request.resource.data.authorId == request.auth.uid;
     }
 
-    // Allows a non-owner to update a document only for reporting it.
+    // Non-owner community reporting action for flagged content only.
     function isFlaggingAction() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['flagged', 'flaggedReason'])
              && request.resource.data.flagged == true;
     }
 
     // -----------------------------------------------------------------
-    // 1. Private User Data (Notes, Todos)
+    // 1. Moderation Data (Admins, Bans, Suspensions)
     // -----------------------------------------------------------------
-    match /artifacts/{appId}/users/{userId}/{collectionName}/{document=**} {
-      allow read: if request.auth != null
-                  && request.auth.uid == userId
-                  && !isBanned();
-
-      allow write: if request.auth != null
-                   && request.auth.uid == userId
-                   && !isBanned()
-                   && !isSuspended();
+    match /artifacts/{appId}/moderation/{collection}/{docId} {
+      allow read, write: if isAdmin(appId);
     }
 
     // -----------------------------------------------------------------
-    // 2. Public Data
+    // 2. Private User Data (Notes, Todos)
+    // -----------------------------------------------------------------
+    match /artifacts/{appId}/users/{userId}/{collectionName}/{document=**} {
+      allow read: if isSignedIn()
+                  && request.auth.uid == userId
+                  && !isBanned(appId);
+
+      allow write: if isSignedIn()
+                   && request.auth.uid == userId
+                   && !isBanned(appId)
+                   && !isSuspended(appId);
+    }
+
+    // -----------------------------------------------------------------
+    // 3. Public Data
     // -----------------------------------------------------------------
 
     // --- A. Profiles ---
     match /artifacts/{appId}/public/data/profiles/{userId} {
-      allow read: if request.auth != null && !isBanned();
+      allow read: if isSignedIn() && !isBanned(appId);
 
-      allow create: if request.auth != null
+      allow create: if isSignedIn()
                    && request.auth.uid == userId
-                   && !isBanned()
-                   && !isSuspended();
+                   && !isBanned(appId)
+                   && !isSuspended(appId);
 
-      allow update: if request.auth != null
-                   && !isBanned()
-                   && !isSuspended()
+      allow update: if isSignedIn()
+                   && !isBanned(appId)
+                   && !isSuspended(appId)
                    && (
                       request.auth.uid == userId
                       || isFlaggingAction()
                    );
 
-      // Owner can delete their own public profile record.
-      allow delete: if request.auth != null
-                   && !isBanned()
-                   && request.auth.uid == userId;
+      // Owner can delete own profile. Admin can remove profiles for moderation.
+      allow delete: if isSignedIn()
+                   && !isBanned(appId)
+                   && (
+                      request.auth.uid == userId
+                      || isAdmin(appId)
+                   );
     }
 
     // --- B. Usernames ---
     match /artifacts/{appId}/public/data/usernames/{username} {
-      allow read: if request.auth != null && !isBanned();
+      allow read: if isSignedIn() && !isBanned(appId);
 
-      allow create: if request.auth != null
-                    && !isBanned()
-                    && !isSuspended()
+      allow create: if isSignedIn()
+                    && !isBanned(appId)
+                    && !isSuspended(appId)
                     && request.resource.data.uid == request.auth.uid;
 
       allow update: if false;
 
-      // Owner can delete their own username mapping when deleting profile.
-      allow delete: if request.auth != null
-                    && !isBanned()
-                    && resource.data.uid == request.auth.uid;
+      // Owner can delete own username mapping. Admin can remove reserved mappings.
+      allow delete: if isSignedIn()
+                    && !isBanned(appId)
+                    && (
+                      resource.data.uid == request.auth.uid
+                      || isAdmin(appId)
+                    );
     }
 
     // --- C. Shared Notes ---
     match /artifacts/{appId}/public/data/shared_notes/{noteId} {
 
-      allow read: if request.auth != null && !isBanned();
+      allow read: if isSignedIn() && !isBanned(appId);
 
-      allow create: if request.auth != null
-                    && !isBanned()
-                    && !isSuspended()
+      allow create: if isSignedIn()
+                    && !isBanned(appId)
+                    && !isSuspended(appId)
                     && request.resource.data.authorId == request.auth.uid;
 
-      allow update: if request.auth != null
-                    && !isBanned()
-                    && !isSuspended()
+      allow update: if isSignedIn()
+                    && !isBanned(appId)
+                    && !isSuspended(appId)
                     && (
                       (isOwner(resource.data) && preservesOwnership())
                       || isFlaggingAction()
+                      || isAdmin(appId)
                     );
 
-      allow delete: if request.auth != null
-                    && !isBanned()
-                    && !isSuspended()
-                    && isOwner(resource.data);
+      // Owner or admin can unshare/delete.
+      allow delete: if isSignedIn()
+                    && !isBanned(appId)
+                    && !isSuspended(appId)
+                    && (
+                      isOwner(resource.data)
+                      || isAdmin(appId)
+                    );
 
       // Comments Sub-collection
       match /comments/{commentId} {
 
-        allow read: if request.auth != null && !isBanned();
+        allow read: if isSignedIn() && !isBanned(appId);
 
-        allow create: if request.auth != null
-                      && !isBanned()
-                      && !isSuspended()
+        allow create: if isSignedIn()
+                      && !isBanned(appId)
+                      && !isSuspended(appId)
                       && request.resource.data.authorId == request.auth.uid;
 
-        // Owner can edit own comment; community can report a comment.
-        allow update: if request.auth != null
-                      && !isBanned()
-                      && !isSuspended()
+        // Owner can edit own comment; community can report; admin can update/moderate.
+        allow update: if isSignedIn()
+                      && !isBanned(appId)
+                      && !isSuspended(appId)
                       && (
                         (isOwner(resource.data) && preservesOwnership())
                         || isFlaggingAction()
+                        || isAdmin(appId)
                       );
 
-        // Delete: The Comment Author OR The Note Owner
-        allow delete: if request.auth != null
-                      && !isBanned()
-                      && !isSuspended()
+        // Comment author, note owner, or admin can delete.
+        allow delete: if isSignedIn()
+                      && !isBanned(appId)
+                      && !isSuspended(appId)
                       && (
                         isOwner(resource.data)
-                        ||
-                        get(/databases/$(database)/documents/artifacts/$(appId)/public/data/shared_notes/$(noteId)).data.authorId == request.auth.uid
+                        || isAdmin(appId)
+                        || get(/databases/$(database)/documents/artifacts/$(appId)/public/data/shared_notes/$(noteId)).data.authorId == request.auth.uid
                       );
       }
     }

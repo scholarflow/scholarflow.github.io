@@ -650,6 +650,47 @@
             </div>
         </section>
 
+        <!-- Admin -->
+        <section id="admin" class="tab-content">
+            <h2 class="text-2xl google-sans mb-4 px-2">Admin Panel</h2>
+            <div id="admin-access-denied" class="material-card text-sm text-red-300 hidden-force mb-4 border border-red-500/20">
+                You do not have permission to access this page.
+            </div>
+
+            <div id="admin-content" class="space-y-4 hidden-force">
+                <div class="material-card">
+                    <p class="font-medium mb-3">Moderation Actions</p>
+                    <div class="space-y-3">
+                        <input id="admin-target-uid" type="text" placeholder="Target user UID" class="w-full bg-transparent border border-white/10 focus:border-blue-400">
+                        <input id="admin-reason" type="text" placeholder="Reason (optional)" class="w-full bg-transparent border border-white/10 focus:border-blue-400">
+                        <div class="grid grid-cols-2 gap-2">
+                            <select id="admin-suspend-duration" class="w-full bg-transparent border border-white/10 focus:border-blue-400">
+                                <option value="1h">Suspend 1 hour</option>
+                                <option value="24h">Suspend 24 hours</option>
+                                <option value="7d">Suspend 7 days</option>
+                                <option value="30d">Suspend 30 days</option>
+                            </select>
+                            <button onclick="adminSuspendUser()" class="ripple rounded-xl bg-amber-500/20 text-amber-300 py-2 font-medium">Suspend User</button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="adminUnsuspendUser()" class="ripple rounded-xl bg-zinc-800 py-2 font-medium">Lift Suspension</button>
+                            <button onclick="adminBanUser()" class="ripple rounded-xl bg-red-500/20 text-red-300 py-2 font-medium">Ban User</button>
+                        </div>
+                        <button onclick="adminUnbanUser()" class="ripple rounded-xl bg-zinc-800 py-2 font-medium w-full">Unban User</button>
+                    </div>
+                </div>
+
+                <div class="material-card">
+                    <p class="font-medium mb-3">Unshare Shared Notes</p>
+                    <div class="flex gap-2 mb-3">
+                        <input id="admin-unshare-note-id" type="text" placeholder="Shared note ID" class="flex-1 bg-transparent border border-white/10 focus:border-blue-400">
+                        <button onclick="adminUnshareById()" class="ripple px-4 rounded-xl bg-red-500/20 text-red-300 font-medium">Unshare</button>
+                    </div>
+                    <div id="admin-shared-notes" class="space-y-2"></div>
+                </div>
+            </div>
+        </section>
+
     </main>
 
     <nav id="appNav" class="fixed bottom-0 left-0 right-0 h-20 bg-[var(--md-sys-color-surface)] border-t border-white/5 flex items-center justify-around z-40 hidden-force backdrop-blur-lg bg-opacity-90">
@@ -676,6 +717,10 @@
         <a href="#settings" class="nav-item flex flex-col items-center gap-1">
             <div class="pill">⚙️</div>
             <span class="text-[11px] font-medium">Settings</span>
+        </a>
+        <a id="admin-nav-link" href="#admin" class="nav-item flex flex-col items-center gap-1 hidden-force">
+            <div class="pill">🛡️</div>
+            <span class="text-[11px] font-medium">Admin</span>
         </a>
     </nav>
 
@@ -731,12 +776,36 @@
         
         // Report State
         let activeReport = null; // { type: 'note' | 'profile' | 'comment', id: string, noteId?: string, content: string }
+        let currentUserIsAdmin = false;
+        let adminSharedNotes = [];
 
         // Update Loader Message Helper
         const setBootStatus = (msg) => {
             const el = document.getElementById('boot-status');
             if (el) el.innerText = msg;
         };
+
+
+        async function refreshAdminStatus() {
+            if (!currentUser) {
+                currentUserIsAdmin = false;
+                return;
+            }
+
+            try {
+                const adminDoc = await getDoc(doc(db, 'artifacts', appId, 'moderation', 'admins', currentUser.uid));
+                currentUserIsAdmin = adminDoc.exists();
+            } catch (e) {
+                console.error('Admin status check failed', e);
+                currentUserIsAdmin = false;
+            }
+
+            const navLink = document.getElementById('admin-nav-link');
+            if (navLink) {
+                if (currentUserIsAdmin) navLink.classList.remove('hidden-force');
+                else navLink.classList.add('hidden-force');
+            }
+        }
 
         // --- Auth Logic ---
         window.toggleAuthMethod = (method) => {
@@ -806,6 +875,8 @@
                     }
                 } catch(e) { console.error("Profile fetch error", e); }
 
+                await refreshAdminStatus();
+
                 // Show App UI (Hidden behind loader initially)
                 document.getElementById('authOverlay').classList.add('hidden-force');
                 document.getElementById('appHeader').classList.remove('hidden-force');
@@ -825,6 +896,7 @@
             } else {
                 currentUser = null;
                 currentUserProfile = null;
+                currentUserIsAdmin = false;
                 // Show Auth UI (Hidden behind loader initially)
                 document.getElementById('authOverlay').classList.remove('hidden-force');
                 document.getElementById('appHeader').classList.add('hidden-force');
@@ -1966,6 +2038,136 @@
             `).join('');
         };
 
+        // --- Admin Tools ---
+        function parseSuspendDuration(value) {
+            const unit = value.endsWith('d') ? 'd' : 'h';
+            const amount = parseInt(value, 10);
+            if (Number.isNaN(amount) || amount <= 0) return 3600000;
+            return unit === 'd' ? amount * 24 * 60 * 60 * 1000 : amount * 60 * 60 * 1000;
+        }
+
+        window.renderAdminPage = async () => {
+            if (!currentUserIsAdmin) return;
+            const container = document.getElementById('admin-shared-notes');
+            if (!container) return;
+
+            container.innerHTML = '<div class="text-xs opacity-60">Loading shared notes...</div>';
+            try {
+                const snap = await getDocs(query(
+                    collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'),
+                    orderBy('timestamp', 'desc'),
+                    limit(20)
+                ));
+                adminSharedNotes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                if (adminSharedNotes.length === 0) {
+                    container.innerHTML = '<div class="text-xs opacity-60">No shared notes found.</div>';
+                    return;
+                }
+
+                container.innerHTML = adminSharedNotes.map(n => `
+                    <div class="flex items-center gap-2 p-2 rounded-lg bg-black/20 border border-white/5">
+                        <div class="flex-1 min-w-0">
+                            <div class="text-xs font-mono truncate">${n.id}</div>
+                            <div class="text-xs opacity-70 truncate">${(n.text || '').slice(0, 80) || 'Untitled'}</div>
+                        </div>
+                        <button onclick="adminUnshareNote('${n.id}')" class="text-xs px-3 py-1 rounded-full bg-red-500/20 text-red-300 ripple">Unshare</button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error(e);
+                container.innerHTML = '<div class="text-xs text-red-300">Could not load notes.</div>';
+            }
+        };
+
+        window.adminUnshareNote = async (noteId) => {
+            if (!currentUserIsAdmin) return;
+            if (!confirm(`Unshare note ${noteId}?`)) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId));
+                adminSharedNotes = adminSharedNotes.filter(n => n.id !== noteId);
+                renderAdminPage();
+            } catch (e) {
+                console.error(e);
+                alert('Failed to unshare note.');
+            }
+        };
+
+        window.adminUnshareById = async () => {
+            const noteId = document.getElementById('admin-unshare-note-id').value.trim();
+            if (!noteId) return;
+            await adminUnshareNote(noteId);
+            document.getElementById('admin-unshare-note-id').value = '';
+        };
+
+        window.adminSuspendUser = async () => {
+            if (!currentUserIsAdmin) return;
+            const uid = document.getElementById('admin-target-uid').value.trim();
+            const reason = document.getElementById('admin-reason').value.trim();
+            const duration = document.getElementById('admin-suspend-duration').value;
+            if (!uid) return alert('Target UID required.');
+
+            const until = new Date(Date.now() + parseSuspendDuration(duration));
+            try {
+                await setDoc(doc(db, 'artifacts', appId, 'moderation', 'suspended_users', uid), {
+                    uid,
+                    reason: reason || 'Policy violation',
+                    until,
+                    suspendedBy: currentUser.uid,
+                    createdAt: Date.now()
+                });
+                alert('User suspended successfully.');
+            } catch (e) {
+                console.error(e);
+                alert('Failed to suspend user.');
+            }
+        };
+
+        window.adminUnsuspendUser = async () => {
+            if (!currentUserIsAdmin) return;
+            const uid = document.getElementById('admin-target-uid').value.trim();
+            if (!uid) return alert('Target UID required.');
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'suspended_users', uid));
+                alert('Suspension removed.');
+            } catch (e) {
+                console.error(e);
+                alert('Failed to remove suspension.');
+            }
+        };
+
+        window.adminBanUser = async () => {
+            if (!currentUserIsAdmin) return;
+            const uid = document.getElementById('admin-target-uid').value.trim();
+            const reason = document.getElementById('admin-reason').value.trim();
+            if (!uid) return alert('Target UID required.');
+            try {
+                await setDoc(doc(db, 'artifacts', appId, 'moderation', 'banned_users', uid), {
+                    uid,
+                    reason: reason || 'Policy violation',
+                    bannedBy: currentUser.uid,
+                    createdAt: Date.now()
+                });
+                alert('User banned successfully.');
+            } catch (e) {
+                console.error(e);
+                alert('Failed to ban user.');
+            }
+        };
+
+        window.adminUnbanUser = async () => {
+            if (!currentUserIsAdmin) return;
+            const uid = document.getElementById('admin-target-uid').value.trim();
+            if (!uid) return alert('Target UID required.');
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'banned_users', uid));
+                alert('Ban removed.');
+            } catch (e) {
+                console.error(e);
+                alert('Failed to remove ban.');
+            }
+        };
+
         // --- Navigation ---
         window.handleRouting = () => {
             const hash = window.location.hash || '#calculator';
@@ -1991,6 +2193,20 @@
                 document.getElementById('profile').classList.add('active');
                 renderProfileUI(null); // Own profile
                 updateNavState('#profile');
+                return;
+            }
+
+            if (hash === '#admin') {
+                if (!currentUserIsAdmin) {
+                    location.hash = '#calculator';
+                    return;
+                }
+
+                document.getElementById('admin').classList.add('active');
+                document.getElementById('admin-access-denied').classList.add('hidden-force');
+                document.getElementById('admin-content').classList.remove('hidden-force');
+                renderAdminPage();
+                updateNavState('#admin');
                 return;
             }
 
