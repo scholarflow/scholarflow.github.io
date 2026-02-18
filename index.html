@@ -793,7 +793,7 @@
             }
 
             try {
-                const adminDoc = await getDoc(doc(db, 'artifacts', appId, 'moderation', 'admins', currentUser.uid));
+                const adminDoc = await getDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'admins', currentUser.uid));
                 currentUserIsAdmin = adminDoc.exists();
             } catch (e) {
                 console.error('Admin status check failed', e);
@@ -2109,7 +2109,7 @@
 
             const until = new Date(Date.now() + parseSuspendDuration(duration));
             try {
-                await setDoc(doc(db, 'artifacts', appId, 'moderation', 'suspended_users', uid), {
+                await setDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users', uid), {
                     uid,
                     reason: reason || 'Policy violation',
                     until,
@@ -2128,7 +2128,7 @@
             const uid = document.getElementById('admin-target-uid').value.trim();
             if (!uid) return alert('Target UID required.');
             try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'suspended_users', uid));
+                await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users', uid));
                 alert('Suspension removed.');
             } catch (e) {
                 console.error(e);
@@ -2142,7 +2142,7 @@
             const reason = document.getElementById('admin-reason').value.trim();
             if (!uid) return alert('Target UID required.');
             try {
-                await setDoc(doc(db, 'artifacts', appId, 'moderation', 'banned_users', uid), {
+                await setDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid), {
                     uid,
                     reason: reason || 'Policy violation',
                     bannedBy: currentUser.uid,
@@ -2160,7 +2160,7 @@
             const uid = document.getElementById('admin-target-uid').value.trim();
             if (!uid) return alert('Target UID required.');
             try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'banned_users', uid));
+                await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid));
                 alert('Ban removed.');
             } catch (e) {
                 console.error(e);

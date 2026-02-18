@@ -12,18 +12,18 @@ service cloud.firestore {
 
     function isAdmin(appId) {
       return isSignedIn()
-             && exists(/databases/$(database)/documents/artifacts/$(appId)/moderation/admins/$(request.auth.uid));
+             && exists(/databases/$(database)/documents/artifacts/$(appId)/moderation/main/admins/$(request.auth.uid));
     }
 
     function isBanned(appId) {
       return isSignedIn()
-             && exists(/databases/$(database)/documents/artifacts/$(appId)/moderation/banned_users/$(request.auth.uid));
+             && exists(/databases/$(database)/documents/artifacts/$(appId)/moderation/main/banned_users/$(request.auth.uid));
     }
 
     function isSuspended(appId) {
       return isSignedIn()
-             && exists(/databases/$(database)/documents/artifacts/$(appId)/moderation/suspended_users/$(request.auth.uid))
-             && get(/databases/$(database)/documents/artifacts/$(appId)/moderation/suspended_users/$(request.auth.uid)).data.until > request.time;
+             && exists(/databases/$(database)/documents/artifacts/$(appId)/moderation/main/suspended_users/$(request.auth.uid))
+             && get(/databases/$(database)/documents/artifacts/$(appId)/moderation/main/suspended_users/$(request.auth.uid)).data.until > request.time;
     }
 
     // Check if request.auth.uid owns a resource with authorId or uid.
@@ -45,7 +45,7 @@ service cloud.firestore {
     // -----------------------------------------------------------------
     // 1. Moderation Data (Admins, Bans, Suspensions)
     // -----------------------------------------------------------------
-    match /artifacts/{appId}/moderation/{collection}/{docId} {
+    match /artifacts/{appId}/moderation/main/{collection}/{docId} {
       allow read, write: if isAdmin(appId);
     }
 
