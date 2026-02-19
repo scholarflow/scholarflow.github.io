@@ -356,6 +356,16 @@
         </div>
     </div>
 
+
+    <!-- Account Status Modal (Suspended / Banned) -->
+    <div id="accountStatusModal" class="modal-overlay">
+        <div class="material-card w-full max-w-sm space-y-4 border border-red-500/20">
+            <h3 id="account-status-title" class="text-xl font-bold text-red-400">Account Status</h3>
+            <p id="account-status-message" class="text-sm opacity-80"></p>
+            <div id="account-status-actions" class="flex gap-2 pt-2"></div>
+        </div>
+    </div>
+
     <!-- Main App UI -->
     <header id="appHeader" class="p-4 flex justify-between items-center sticky top-0 bg-[var(--md-sys-color-surface)] z-40 hidden-force">
         <div class="flex items-center gap-3">
@@ -778,6 +788,7 @@
         let activeReport = null; // { type: 'note' | 'profile' | 'comment', id: string, noteId?: string, content: string }
         let currentUserIsAdmin = false;
         let adminSharedNotes = [];
+        let currentAccountStatus = null; // null | { type: 'suspended' | 'banned', message: string }
 
         // Update Loader Message Helper
         const setBootStatus = (msg) => {
@@ -805,6 +816,66 @@
                 if (currentUserIsAdmin) navLink.classList.remove('hidden-force');
                 else navLink.classList.add('hidden-force');
             }
+        }
+
+        function closeAccountStatusModal() {
+            document.getElementById('accountStatusModal').classList.remove('active');
+        }
+
+        function showAccountStatusModal(status) {
+            currentAccountStatus = status;
+            const modal = document.getElementById('accountStatusModal');
+            const title = document.getElementById('account-status-title');
+            const message = document.getElementById('account-status-message');
+            const actions = document.getElementById('account-status-actions');
+
+            if (!modal || !title || !message || !actions) return;
+
+            title.innerText = status.type === 'banned' ? 'Account Banned' : 'Account Suspended';
+            message.innerText = status.message;
+
+            if (status.type === 'banned') {
+                actions.innerHTML = `<button onclick="handleSignOut()" class="w-full bg-red-400 text-red-950 py-3 rounded-xl font-bold ripple">Log Out</button>`;
+            } else {
+                actions.innerHTML = `
+                    <button onclick="closeAccountStatusModal()" class="flex-1 py-3 rounded-xl font-medium ripple hover:bg-white/5">Dismiss</button>
+                    <button onclick="handleSignOut()" class="flex-1 bg-red-400 text-red-950 py-3 rounded-xl font-bold ripple">Log Out</button>
+                `;
+            }
+
+            modal.classList.add('active');
+        }
+
+        async function checkAccountModerationState() {
+            if (!currentUser) return null;
+
+            try {
+                const bannedDoc = await getDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', currentUser.uid));
+                if (bannedDoc.exists()) {
+                    const data = bannedDoc.data() || {};
+                    return {
+                        type: 'banned',
+                        message: data.reason ? `Your account has been banned. Reason: ${data.reason}` : 'Your account has been banned due to policy violations.'
+                    };
+                }
+
+                const suspendedDoc = await getDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users', currentUser.uid));
+                if (suspendedDoc.exists()) {
+                    const data = suspendedDoc.data() || {};
+                    const until = data.until && typeof data.until.toDate === 'function' ? data.until.toDate() : null;
+                    if (until && until.getTime() > Date.now()) {
+                        const untilText = until.toLocaleString();
+                        return {
+                            type: 'suspended',
+                            message: `Your account is suspended until ${untilText}.${data.reason ? ` Reason: ${data.reason}` : ''}`
+                        };
+                    }
+                }
+            } catch (e) {
+                console.error('Moderation status check failed', e);
+            }
+
+            return null;
         }
 
         // --- Auth Logic ---
@@ -855,7 +926,7 @@
             }
         }
 
-        window.handleSignOut = () => signOut(auth);
+        window.handleSignOut = () => { closeAccountStatusModal(); return signOut(auth); };
 
         onAuthStateChanged(auth, async (user) => {
             setBootStatus("Checking credentials...");
@@ -876,6 +947,7 @@
                 } catch(e) { console.error("Profile fetch error", e); }
 
                 await refreshAdminStatus();
+                const moderationState = await checkAccountModerationState();
 
                 // Show App UI (Hidden behind loader initially)
                 document.getElementById('authOverlay').classList.add('hidden-force');
@@ -892,11 +964,19 @@
                 }
                 
                 handleRouting(); 
+
+                if (moderationState) {
+                    showAccountStatusModal(moderationState);
+                } else {
+                    closeAccountStatusModal();
+                }
                 
             } else {
                 currentUser = null;
                 currentUserProfile = null;
                 currentUserIsAdmin = false;
+                currentAccountStatus = null;
+                closeAccountStatusModal();
                 // Show Auth UI (Hidden behind loader initially)
                 document.getElementById('authOverlay').classList.remove('hidden-force');
                 document.getElementById('appHeader').classList.add('hidden-force');
