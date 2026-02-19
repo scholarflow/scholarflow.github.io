@@ -2377,24 +2377,31 @@
 
             await commitUpdatesInChunks(primaryUpdates, true);
 
-            // PHASE 2 (best effort): comments
+            // PHASE 2 (best effort): comments (per-note queries inside this app)
             const secondaryUpdates = [];
-            const commentsSnap = await getDocs(query(
-                collectionGroup(db, 'comments'),
-                where('authorId', '==', uid)
-            ));
+            const sharedNotesSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'));
 
-            commentsSnap.forEach(commentDoc => {
-                if (!commentDoc.ref.path.includes(`/artifacts/${appId}/public/data/shared_notes/`)) return;
-                secondaryUpdates.push({
-                    ref: commentDoc.ref,
-                    payload: {
-                        hidden: isHidden,
-                        flagged: isHidden,
-                        flaggedReason: isHidden ? safeReason : null
-                    }
-                });
-            });
+            for (const sharedNoteDoc of sharedNotesSnap.docs) {
+                try {
+                    const commentSnap = await getDocs(query(
+                        collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', sharedNoteDoc.id, 'comments'),
+                        where('authorId', '==', uid)
+                    ));
+
+                    commentSnap.forEach(commentDoc => {
+                        secondaryUpdates.push({
+                            ref: commentDoc.ref,
+                            payload: {
+                                hidden: isHidden,
+                                flagged: isHidden,
+                                flaggedReason: isHidden ? safeReason : null
+                            }
+                        });
+                    });
+                } catch (e) {
+                    console.warn('Skipping comment sync for note due to query error:', sharedNoteDoc.id, e);
+                }
+            }
 
             await commitUpdatesInChunks(secondaryUpdates, false);
         }
