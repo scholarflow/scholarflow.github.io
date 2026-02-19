@@ -1647,8 +1647,9 @@
             container.innerHTML = "";
             
             // Separate parents and replies
-            const parents = currentNoteComments.filter(c => !c.parentId);
-            const replies = currentNoteComments.filter(c => c.parentId);
+            const visibleComments = currentNoteComments.filter(c => !c.hidden);
+            const parents = visibleComments.filter(c => !c.parentId);
+            const replies = visibleComments.filter(c => c.parentId);
 
             if (parents.length === 0) {
                 container.innerHTML = `<div class="text-center text-xs opacity-40 py-8">No comments yet. Be the first!</div>`;
@@ -2252,6 +2253,7 @@
             if (!currentUserIsAdmin) return;
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid));
+                await setUserPublicContentVisibility(uid, false);
                 await renderAdminUserStatusLists();
             } catch (e) {
                 console.error(e);
@@ -2317,51 +2319,59 @@
             }
         };
 
-        async function hideUserPublicContent(uid, reason) {
-            const safeReason = reason || 'Banned account content hidden';
+        async function setUserPublicContentVisibility(uid, isHidden, reason = '') {
+            const safeReason = reason || 'Moderation content action';
             const updates = [];
             const MAX_BATCH = 400;
 
-            // Hide profile only if it exists
+            // Profile
             const profileRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', uid);
             const profileSnap = await getDoc(profileRef);
             if (profileSnap.exists()) {
-                updates.push({ ref: profileRef, payload: { hidden: true, flagged: true } });
+                updates.push({
+                    ref: profileRef,
+                    payload: {
+                        hidden: isHidden,
+                        flagged: isHidden
+                    }
+                });
             }
 
-            // Hide all shared notes by this user
+            // Shared notes by this user
             const notesSnap = await getDocs(query(
                 collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'),
                 where('authorId', '==', uid)
             ));
 
-            for (const noteDoc of notesSnap.docs) {
+            notesSnap.forEach(noteDoc => {
                 updates.push({
                     ref: noteDoc.ref,
                     payload: {
-                        flagged: true,
-                        hidden: true,
-                        flaggedReason: safeReason,
-                        commentsDisabled: true
+                        flagged: isHidden,
+                        hidden: isHidden,
+                        flaggedReason: isHidden ? safeReason : null,
+                        commentsDisabled: isHidden ? true : false
                     }
                 });
+            });
 
-                // Flag comments by this banned user inside this note thread
-                const commentSnap = await getDocs(query(
-                    collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteDoc.id, 'comments'),
-                    where('authorId', '==', uid)
-                ));
+            // All comments by this user across shared notes
+            const commentsSnap = await getDocs(query(
+                collectionGroup(db, 'comments'),
+                where('authorId', '==', uid)
+            ));
 
-                commentSnap.forEach(commentDoc => {
-                    updates.push({
-                        ref: commentDoc.ref,
-                        payload: {
-                            flagged: true,
-                            flaggedReason: safeReason
-                        }
-                    });
+            commentsSnap.forEach(commentDoc => {
+                if (!commentDoc.ref.path.includes(`/artifacts/${appId}/public/data/shared_notes/`)) return;
+                updates.push({
+                    ref: commentDoc.ref,
+                    payload: {
+                        hidden: isHidden,
+                        flagged: isHidden,
+                        flaggedReason: isHidden ? safeReason : null
+                    }
                 });
-            }
+            });
 
             for (let i = 0; i < updates.length; i += MAX_BATCH) {
                 const batch = writeBatch(db);
@@ -2383,7 +2393,7 @@
                     bannedBy: currentUser.uid,
                     createdAt: Date.now()
                 });
-                await hideUserPublicContent(uid, banReason);
+                await setUserPublicContentVisibility(uid, true, banReason);
                 alert('User banned successfully and public content hidden.');
                 await renderAdminUserStatusLists();
             } catch (e) {
@@ -2398,7 +2408,8 @@
             if (!uid) return alert('Target UID required.');
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid));
-                alert('Ban removed.');
+                await setUserPublicContentVisibility(uid, false);
+                alert('Ban removed and public content restored.');
                 await renderAdminUserStatusLists();
             } catch (e) {
                 console.error(e);
