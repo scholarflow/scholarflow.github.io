@@ -93,6 +93,7 @@ service cloud.firestore {
                    && (
                       request.auth.uid == userId
                       || isFlaggingAction()
+                      || isAdmin(appId)
                    );
 
       // Owner can delete own profile. Admin can remove profiles for moderation.

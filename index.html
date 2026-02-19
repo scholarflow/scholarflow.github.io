@@ -2096,7 +2096,7 @@
         // --- Rendering ---
         window.renderNotes = () => {
             const container = document.getElementById('notesContainer');
-            const list = noteViewMode === 'private' ? notes : sharedNotes;
+            const list = noteViewMode === 'private' ? notes : sharedNotes.filter(n => !n.hidden);
             
             if (list.length === 0) {
                 container.innerHTML = `<div class="p-8 text-center opacity-40">No ${noteViewMode === 'private' ? 'private' : 'community'} notes found.</div>`;
@@ -2317,19 +2317,69 @@
             }
         };
 
+        async function hideUserPublicContent(uid, reason) {
+            const safeReason = reason || 'Banned account content hidden';
+            const updates = [];
+            const MAX_BATCH = 400;
+
+            const profileRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', uid);
+            updates.push({ ref: profileRef, payload: { hidden: true, flagged: true } });
+
+            const notesSnap = await getDocs(query(
+                collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'),
+                where('authorId', '==', uid)
+            ));
+
+            notesSnap.forEach(noteDoc => {
+                updates.push({
+                    ref: noteDoc.ref,
+                    payload: {
+                        flagged: true,
+                        hidden: true,
+                        flaggedReason: safeReason,
+                        commentsDisabled: true
+                    }
+                });
+            });
+
+            const commentsSnap = await getDocs(query(
+                collectionGroup(db, 'comments'),
+                where('authorId', '==', uid)
+            ));
+
+            commentsSnap.forEach(commentDoc => {
+                if (!commentDoc.ref.path.includes(`/artifacts/${appId}/public/data/shared_notes/`)) return;
+                updates.push({
+                    ref: commentDoc.ref,
+                    payload: {
+                        flagged: true,
+                        flaggedReason: safeReason
+                    }
+                });
+            });
+
+            for (let i = 0; i < updates.length; i += MAX_BATCH) {
+                const batch = writeBatch(db);
+                updates.slice(i, i + MAX_BATCH).forEach(({ ref, payload }) => batch.update(ref, payload));
+                await batch.commit();
+            }
+        }
+
         window.adminBanUser = async () => {
             if (!currentUserIsAdmin) return;
             const uid = document.getElementById('admin-target-uid').value.trim();
             const reason = document.getElementById('admin-reason').value.trim();
             if (!uid) return alert('Target UID required.');
             try {
+                const banReason = reason || 'Policy violation';
                 await setDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid), {
                     uid,
-                    reason: reason || 'Policy violation',
+                    reason: banReason,
                     bannedBy: currentUser.uid,
                     createdAt: Date.now()
                 });
-                alert('User banned successfully.');
+                await hideUserPublicContent(uid, banReason);
+                alert('User banned successfully and public content hidden.');
                 await renderAdminUserStatusLists();
             } catch (e) {
                 console.error(e);
@@ -2471,8 +2521,16 @@
             
             const contentDiv = document.getElementById('note-detail-content');
             
-            // Check Flagged Status for Viewer
-            if (note.flagged) {
+            // Check Moderation Hidden/Flagged Status for Viewer
+            if (note.hidden) {
+                contentDiv.innerHTML = `
+                    <div class="flagged-overlay">
+                        <div class="text-4xl">🚫</div>
+                        <div class="flagged-title">Content Hidden</div>
+                        <p class="text-sm opacity-90">This content has been hidden by moderation.</p>
+                    </div>
+                `;
+            } else if (note.flagged) {
                 contentDiv.innerHTML = `
                     <div class="flagged-overlay">
                         <div class="text-4xl">⚠️</div>
