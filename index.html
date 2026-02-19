@@ -2322,15 +2322,20 @@
             const updates = [];
             const MAX_BATCH = 400;
 
+            // Hide profile only if it exists
             const profileRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', uid);
-            updates.push({ ref: profileRef, payload: { hidden: true, flagged: true } });
+            const profileSnap = await getDoc(profileRef);
+            if (profileSnap.exists()) {
+                updates.push({ ref: profileRef, payload: { hidden: true, flagged: true } });
+            }
 
+            // Hide all shared notes by this user
             const notesSnap = await getDocs(query(
                 collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'),
                 where('authorId', '==', uid)
             ));
 
-            notesSnap.forEach(noteDoc => {
+            for (const noteDoc of notesSnap.docs) {
                 updates.push({
                     ref: noteDoc.ref,
                     payload: {
@@ -2340,23 +2345,23 @@
                         commentsDisabled: true
                     }
                 });
-            });
 
-            const commentsSnap = await getDocs(query(
-                collectionGroup(db, 'comments'),
-                where('authorId', '==', uid)
-            ));
+                // Flag comments by this banned user inside this note thread
+                const commentSnap = await getDocs(query(
+                    collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteDoc.id, 'comments'),
+                    where('authorId', '==', uid)
+                ));
 
-            commentsSnap.forEach(commentDoc => {
-                if (!commentDoc.ref.path.includes(`/artifacts/${appId}/public/data/shared_notes/`)) return;
-                updates.push({
-                    ref: commentDoc.ref,
-                    payload: {
-                        flagged: true,
-                        flaggedReason: safeReason
-                    }
+                commentSnap.forEach(commentDoc => {
+                    updates.push({
+                        ref: commentDoc.ref,
+                        payload: {
+                            flagged: true,
+                            flaggedReason: safeReason
+                        }
+                    });
                 });
-            });
+            }
 
             for (let i = 0; i < updates.length; i += MAX_BATCH) {
                 const batch = writeBatch(db);
