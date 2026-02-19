@@ -2253,11 +2253,15 @@
             if (!currentUserIsAdmin) return;
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid));
-                await setUserPublicContentVisibility(uid, false);
+                try {
+                    await setUserPublicContentVisibility(uid, false);
+                } catch (visibilityError) {
+                    console.warn('Unban applied but visibility restore sync failed:', visibilityError);
+                }
                 await renderAdminUserStatusLists();
             } catch (e) {
                 console.error(e);
-                alert('Failed to unban user.');
+                alert(`Failed to unban user: ${e.message || 'Unknown error'}`);
             }
         };
 
@@ -2393,12 +2397,17 @@
                     bannedBy: currentUser.uid,
                     createdAt: Date.now()
                 });
-                await setUserPublicContentVisibility(uid, true, banReason);
-                alert('User banned successfully and public content hidden.');
+                try {
+                    await setUserPublicContentVisibility(uid, true, banReason);
+                    alert('User banned successfully and public content hidden.');
+                } catch (visibilityError) {
+                    console.warn('Ban applied but content hide sync failed:', visibilityError);
+                    alert('User banned, but some public content could not be hidden immediately.');
+                }
                 await renderAdminUserStatusLists();
             } catch (e) {
                 console.error(e);
-                alert('Failed to ban user.');
+                alert(`Failed to ban user: ${e.message || 'Unknown error'}`);
             }
         };
 
@@ -2408,12 +2417,17 @@
             if (!uid) return alert('Target UID required.');
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid));
-                await setUserPublicContentVisibility(uid, false);
-                alert('Ban removed and public content restored.');
+                try {
+                    await setUserPublicContentVisibility(uid, false);
+                    alert('Ban removed and public content restored.');
+                } catch (visibilityError) {
+                    console.warn('Unban applied but content restore sync failed:', visibilityError);
+                    alert('Ban removed, but some content could not be restored automatically.');
+                }
                 await renderAdminUserStatusLists();
             } catch (e) {
                 console.error(e);
-                alert('Failed to remove ban.');
+                alert(`Failed to remove ban: ${e.message || 'Unknown error'}`);
             }
         };
 
