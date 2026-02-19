@@ -698,6 +698,20 @@
                     </div>
                     <div id="admin-shared-notes" class="space-y-2"></div>
                 </div>
+
+                <div class="material-card">
+                    <p class="font-medium mb-3">Banned & Suspended Users</p>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-xs uppercase opacity-60 mb-2">Suspended</p>
+                            <div id="admin-suspended-users" class="space-y-2"></div>
+                        </div>
+                        <div>
+                            <p class="text-xs uppercase opacity-60 mb-2">Banned</p>
+                            <div id="admin-banned-users" class="space-y-2"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -818,9 +832,9 @@
             }
         }
 
-        function closeAccountStatusModal() {
+        window.closeAccountStatusModal = () => {
             document.getElementById('accountStatusModal').classList.remove('active');
-        }
+        };
 
         function showAccountStatusModal(status) {
             currentAccountStatus = status;
@@ -936,7 +950,7 @@
             }
         }
 
-        window.handleSignOut = () => { closeAccountStatusModal(); return signOut(auth); };
+        window.handleSignOut = () => { window.closeAccountStatusModal(); return signOut(auth); };
 
         onAuthStateChanged(auth, async (user) => {
             setBootStatus("Checking credentials...");
@@ -978,7 +992,7 @@
                 if (moderationState) {
                     showAccountStatusModal(moderationState);
                 } else {
-                    closeAccountStatusModal();
+                    window.closeAccountStatusModal();
                 }
                 
             } else {
@@ -986,7 +1000,7 @@
                 currentUserProfile = null;
                 currentUserIsAdmin = false;
                 currentAccountStatus = null;
-                closeAccountStatusModal();
+                window.closeAccountStatusModal();
                 // Show Auth UI (Hidden behind loader initially)
                 document.getElementById('authOverlay').classList.remove('hidden-force');
                 document.getElementById('appHeader').classList.add('hidden-force');
@@ -2152,6 +2166,7 @@
 
                 if (adminSharedNotes.length === 0) {
                     container.innerHTML = '<div class="text-xs opacity-60">No shared notes found.</div>';
+                    await renderAdminUserStatusLists();
                     return;
                 }
 
@@ -2164,9 +2179,83 @@
                         <button onclick="adminUnshareNote('${n.id}')" class="text-xs px-3 py-1 rounded-full bg-red-500/20 text-red-300 ripple">Unshare</button>
                     </div>
                 `).join('');
+
+                await renderAdminUserStatusLists();
             } catch (e) {
                 console.error(e);
                 container.innerHTML = '<div class="text-xs text-red-300">Could not load notes.</div>';
+            }
+        };
+
+        async function renderAdminUserStatusLists() {
+            const suspendedContainer = document.getElementById('admin-suspended-users');
+            const bannedContainer = document.getElementById('admin-banned-users');
+            if (!suspendedContainer || !bannedContainer) return;
+
+            suspendedContainer.innerHTML = '<div class="text-xs opacity-60">Loading...</div>';
+            bannedContainer.innerHTML = '<div class="text-xs opacity-60">Loading...</div>';
+
+            try {
+                const [suspendedSnap, bannedSnap] = await Promise.all([
+                    getDocs(query(collection(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users'), limit(25))),
+                    getDocs(query(collection(db, 'artifacts', appId, 'moderation', 'main', 'banned_users'), limit(25)))
+                ]);
+
+                const suspendedUsers = suspendedSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const bannedUsers = bannedSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                if (suspendedUsers.length === 0) {
+                    suspendedContainer.innerHTML = '<div class="text-xs opacity-60">No suspended users.</div>';
+                } else {
+                    suspendedContainer.innerHTML = suspendedUsers.map(u => {
+                        const until = u.until && typeof u.until.toDate === 'function' ? u.until.toDate().toLocaleString() : 'Unknown';
+                        return `
+                            <div class="p-2 rounded-lg bg-black/20 border border-white/5">
+                                <div class="text-xs font-mono truncate">${u.id}</div>
+                                <div class="text-[11px] opacity-70 truncate">Until: ${until}</div>
+                                <button onclick="adminUnsuspendSpecific('${u.id}')" class="mt-2 text-xs px-3 py-1 rounded-full bg-zinc-800 ripple">Unsuspend</button>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                if (bannedUsers.length === 0) {
+                    bannedContainer.innerHTML = '<div class="text-xs opacity-60">No banned users.</div>';
+                } else {
+                    bannedContainer.innerHTML = bannedUsers.map(u => `
+                        <div class="p-2 rounded-lg bg-black/20 border border-white/5">
+                            <div class="text-xs font-mono truncate">${u.id}</div>
+                            <div class="text-[11px] opacity-70 truncate">${u.reason || 'No reason provided'}</div>
+                            <button onclick="adminUnbanSpecific('${u.id}')" class="mt-2 text-xs px-3 py-1 rounded-full bg-zinc-800 ripple">Unban</button>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                console.error(e);
+                suspendedContainer.innerHTML = '<div class="text-xs text-red-300">Failed to load suspended users.</div>';
+                bannedContainer.innerHTML = '<div class="text-xs text-red-300">Failed to load banned users.</div>';
+            }
+        }
+
+        window.adminUnsuspendSpecific = async (uid) => {
+            if (!currentUserIsAdmin) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users', uid));
+                await renderAdminUserStatusLists();
+            } catch (e) {
+                console.error(e);
+                alert('Failed to unsuspend user.');
+            }
+        };
+
+        window.adminUnbanSpecific = async (uid) => {
+            if (!currentUserIsAdmin) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid));
+                await renderAdminUserStatusLists();
+            } catch (e) {
+                console.error(e);
+                alert('Failed to unban user.');
             }
         };
 
@@ -2207,6 +2296,7 @@
                     createdAt: Date.now()
                 });
                 alert('User suspended successfully.');
+                await renderAdminUserStatusLists();
             } catch (e) {
                 console.error(e);
                 alert('Failed to suspend user.');
@@ -2220,6 +2310,7 @@
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users', uid));
                 alert('Suspension removed.');
+                await renderAdminUserStatusLists();
             } catch (e) {
                 console.error(e);
                 alert('Failed to remove suspension.');
@@ -2239,6 +2330,7 @@
                     createdAt: Date.now()
                 });
                 alert('User banned successfully.');
+                await renderAdminUserStatusLists();
             } catch (e) {
                 console.error(e);
                 alert('Failed to ban user.');
@@ -2252,6 +2344,7 @@
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid));
                 alert('Ban removed.');
+                await renderAdminUserStatusLists();
             } catch (e) {
                 console.error(e);
                 alert('Failed to remove ban.');
