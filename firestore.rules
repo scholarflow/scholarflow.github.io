@@ -87,21 +87,23 @@ service cloud.firestore {
                    && !isBanned(appId)
                    && !isSuspended(appId);
 
-      allow update: if isSignedIn()
-                   && !isBanned(appId)
-                   && !isSuspended(appId)
-                   && (
-                      request.auth.uid == userId
-                      || isFlaggingAction()
-                      || isAdmin(appId)
+      allow update: if isAdmin(appId)
+                   || (
+                     isSignedIn()
+                     && !isBanned(appId)
+                     && !isSuspended(appId)
+                     && (
+                        request.auth.uid == userId
+                        || isFlaggingAction()
+                     )
                    );
 
       // Owner can delete own profile. Admin can remove profiles for moderation.
-      allow delete: if isSignedIn()
-                   && !isBanned(appId)
-                   && (
-                      request.auth.uid == userId
-                      || isAdmin(appId)
+      allow delete: if isAdmin(appId)
+                   || (
+                     isSignedIn()
+                     && !isBanned(appId)
+                     && request.auth.uid == userId
                    );
     }
 
@@ -117,11 +119,11 @@ service cloud.firestore {
       allow update: if false;
 
       // Owner can delete own username mapping. Admin can remove reserved mappings.
-      allow delete: if isSignedIn()
-                    && !isBanned(appId)
-                    && (
-                      resource.data.uid == request.auth.uid
-                      || isAdmin(appId)
+      allow delete: if isAdmin(appId)
+                    || (
+                      isSignedIn()
+                      && !isBanned(appId)
+                      && resource.data.uid == request.auth.uid
                     );
     }
 
@@ -135,22 +137,24 @@ service cloud.firestore {
                     && !isSuspended(appId)
                     && request.resource.data.authorId == request.auth.uid;
 
-      allow update: if isSignedIn()
-                    && !isBanned(appId)
-                    && !isSuspended(appId)
-                    && (
-                      (isOwner(resource.data) && preservesOwnership())
-                      || isFlaggingAction()
-                      || isAdmin(appId)
+      allow update: if isAdmin(appId)
+                    || (
+                      isSignedIn()
+                      && !isBanned(appId)
+                      && !isSuspended(appId)
+                      && (
+                        (isOwner(resource.data) && preservesOwnership())
+                        || isFlaggingAction()
+                      )
                     );
 
       // Owner or admin can unshare/delete.
-      allow delete: if isSignedIn()
-                    && !isBanned(appId)
-                    && !isSuspended(appId)
-                    && (
-                      isOwner(resource.data)
-                      || isAdmin(appId)
+      allow delete: if isAdmin(appId)
+                    || (
+                      isSignedIn()
+                      && !isBanned(appId)
+                      && !isSuspended(appId)
+                      && isOwner(resource.data)
                     );
 
       // Comments Sub-collection
@@ -164,23 +168,27 @@ service cloud.firestore {
                       && request.resource.data.authorId == request.auth.uid;
 
         // Owner can edit own comment; community can report; admin can update/moderate.
-        allow update: if isSignedIn()
-                      && !isBanned(appId)
-                      && !isSuspended(appId)
-                      && (
-                        (isOwner(resource.data) && preservesOwnership())
-                        || isFlaggingAction()
-                        || isAdmin(appId)
+        allow update: if isAdmin(appId)
+                      || (
+                        isSignedIn()
+                        && !isBanned(appId)
+                        && !isSuspended(appId)
+                        && (
+                          (isOwner(resource.data) && preservesOwnership())
+                          || isFlaggingAction()
+                        )
                       );
 
         // Comment author, note owner, or admin can delete.
-        allow delete: if isSignedIn()
-                      && !isBanned(appId)
-                      && !isSuspended(appId)
-                      && (
-                        isOwner(resource.data)
-                        || isAdmin(appId)
-                        || get(/databases/$(database)/documents/artifacts/$(appId)/public/data/shared_notes/$(noteId)).data.authorId == request.auth.uid
+        allow delete: if isAdmin(appId)
+                      || (
+                        isSignedIn()
+                        && !isBanned(appId)
+                        && !isSuspended(appId)
+                        && (
+                          isOwner(resource.data)
+                          || get(/databases/$(database)/documents/artifacts/$(appId)/public/data/shared_notes/$(noteId)).data.authorId == request.auth.uid
+                        )
                       );
       }
     }
