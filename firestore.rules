@@ -45,6 +45,17 @@ service cloud.firestore {
     // -----------------------------------------------------------------
     // 1. Moderation Data (Admins, Bans, Suspensions)
     // -----------------------------------------------------------------
+    // Users can read their own ban/suspension status so the app can show account state popups.
+    match /artifacts/{appId}/moderation/main/banned_users/{userId} {
+      allow read: if isAdmin(appId) || (isSignedIn() && request.auth.uid == userId);
+      allow write: if isAdmin(appId);
+    }
+
+    match /artifacts/{appId}/moderation/main/suspended_users/{userId} {
+      allow read: if isAdmin(appId) || (isSignedIn() && request.auth.uid == userId);
+      allow write: if isAdmin(appId);
+    }
+
     match /artifacts/{appId}/moderation/main/{collection}/{docId} {
       allow read, write: if isAdmin(appId);
     }

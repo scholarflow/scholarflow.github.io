@@ -862,7 +862,17 @@
                 const suspendedDoc = await getDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users', currentUser.uid));
                 if (suspendedDoc.exists()) {
                     const data = suspendedDoc.data() || {};
-                    const until = data.until && typeof data.until.toDate === 'function' ? data.until.toDate() : null;
+                    let until = null;
+
+                    if (data.until && typeof data.until.toDate === 'function') {
+                        until = data.until.toDate();
+                    } else if (typeof data.until === 'number') {
+                        until = new Date(data.until);
+                    } else if (typeof data.until === 'string') {
+                        const parsed = new Date(data.until);
+                        until = Number.isNaN(parsed.getTime()) ? null : parsed;
+                    }
+
                     if (until && until.getTime() > Date.now()) {
                         const untilText = until.toLocaleString();
                         return {
