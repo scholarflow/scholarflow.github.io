@@ -217,6 +217,9 @@
             color: #ffb4ab;
             border-color: rgba(255,0,0,0.2);
         }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         body.light .attachment-tag.deleted {
             color: #ba1a1a;
         }
@@ -717,28 +720,28 @@
 
     </main>
 
-    <nav id="appNav" class="fixed bottom-0 left-0 right-0 h-20 bg-[var(--md-sys-color-surface)] border-t border-white/5 flex items-center justify-around z-40 hidden-force backdrop-blur-lg bg-opacity-90">
-        <a href="#calculator" class="nav-item flex flex-col items-center gap-1">
+    <nav id="appNav" class="fixed bottom-0 left-0 right-0 h-20 bg-[var(--md-sys-color-surface)] border-t border-white/5 flex items-center justify-start gap-1 px-2 overflow-x-auto no-scrollbar z-40 hidden-force backdrop-blur-lg bg-opacity-90">
+        <a href="#calculator" class="nav-item flex flex-col items-center gap-1 shrink-0 min-w-[64px]">
             <div class="pill">🧮</div>
             <span class="text-[11px] font-medium">Math</span>
         </a>
-        <a href="#graph" class="nav-item flex flex-col items-center gap-1">
+        <a href="#graph" class="nav-item flex flex-col items-center gap-1 shrink-0 min-w-[64px]">
             <div class="pill">📈</div>
             <span class="text-[11px] font-medium">Graph</span>
         </a>
-        <a href="#notes" class="nav-item flex flex-col items-center gap-1">
+        <a href="#notes" class="nav-item flex flex-col items-center gap-1 shrink-0 min-w-[64px]">
             <div class="pill">📝</div>
             <span class="text-[11px] font-medium">Notes</span>
         </a>
-        <a href="#profile" class="nav-item flex flex-col items-center gap-1">
+        <a href="#profile" class="nav-item flex flex-col items-center gap-1 shrink-0 min-w-[64px]">
             <div class="pill">👤</div>
             <span class="text-[11px] font-medium">Profile</span>
         </a>
-        <a href="#planner" class="nav-item flex flex-col items-center gap-1">
+        <a href="#planner" class="nav-item flex flex-col items-center gap-1 shrink-0 min-w-[64px]">
             <div class="pill">📅</div>
             <span class="text-[11px] font-medium">Plan</span>
         </a>
-        <a href="#settings" class="nav-item flex flex-col items-center gap-1">
+        <a href="#settings" class="nav-item flex flex-col items-center gap-1 shrink-0 min-w-[64px]">
             <div class="pill">⚙️</div>
             <span class="text-[11px] font-medium">Settings</span>
         </a>
