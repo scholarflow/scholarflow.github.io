@@ -2325,14 +2325,31 @@
 
         async function setUserPublicContentVisibility(uid, isHidden, reason = '') {
             const safeReason = reason || 'Moderation content action';
-            const updates = [];
             const MAX_BATCH = 400;
 
-            // Profile
+            const commitUpdatesInChunks = async (updates, throwOnError = true) => {
+                for (let i = 0; i < updates.length; i += MAX_BATCH) {
+                    const batch = writeBatch(db);
+                    updates.slice(i, i + MAX_BATCH).forEach(({ ref, payload }) => batch.update(ref, payload));
+                    if (throwOnError) {
+                        await batch.commit();
+                    } else {
+                        try {
+                            await batch.commit();
+                        } catch (e) {
+                            console.warn('Non-critical moderation sync batch failed:', e);
+                        }
+                    }
+                }
+            };
+
+            // PHASE 1 (critical): profile + shared notes
+            const primaryUpdates = [];
+
             const profileRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', uid);
             const profileSnap = await getDoc(profileRef);
             if (profileSnap.exists()) {
-                updates.push({
+                primaryUpdates.push({
                     ref: profileRef,
                     payload: {
                         hidden: isHidden,
@@ -2341,14 +2358,13 @@
                 });
             }
 
-            // Shared notes by this user
             const notesSnap = await getDocs(query(
                 collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'),
                 where('authorId', '==', uid)
             ));
 
             notesSnap.forEach(noteDoc => {
-                updates.push({
+                primaryUpdates.push({
                     ref: noteDoc.ref,
                     payload: {
                         flagged: isHidden,
@@ -2359,7 +2375,10 @@
                 });
             });
 
-            // All comments by this user across shared notes
+            await commitUpdatesInChunks(primaryUpdates, true);
+
+            // PHASE 2 (best effort): comments
+            const secondaryUpdates = [];
             const commentsSnap = await getDocs(query(
                 collectionGroup(db, 'comments'),
                 where('authorId', '==', uid)
@@ -2367,7 +2386,7 @@
 
             commentsSnap.forEach(commentDoc => {
                 if (!commentDoc.ref.path.includes(`/artifacts/${appId}/public/data/shared_notes/`)) return;
-                updates.push({
+                secondaryUpdates.push({
                     ref: commentDoc.ref,
                     payload: {
                         hidden: isHidden,
@@ -2377,11 +2396,7 @@
                 });
             });
 
-            for (let i = 0; i < updates.length; i += MAX_BATCH) {
-                const batch = writeBatch(db);
-                updates.slice(i, i + MAX_BATCH).forEach(({ ref, payload }) => batch.update(ref, payload));
-                await batch.commit();
-            }
+            await commitUpdatesInChunks(secondaryUpdates, false);
         }
 
         window.adminBanUser = async () => {
