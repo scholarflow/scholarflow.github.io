@@ -356,6 +356,16 @@
         </div>
     </div>
 
+
+    <!-- Account Status Modal (Suspended / Banned) -->
+    <div id="accountStatusModal" class="modal-overlay">
+        <div class="material-card w-full max-w-sm space-y-4 border border-red-500/20">
+            <h3 id="account-status-title" class="text-xl font-bold text-red-400">Account Status</h3>
+            <p id="account-status-message" class="text-sm opacity-80"></p>
+            <div id="account-status-actions" class="flex gap-2 pt-2"></div>
+        </div>
+    </div>
+
     <!-- Main App UI -->
     <header id="appHeader" class="p-4 flex justify-between items-center sticky top-0 bg-[var(--md-sys-color-surface)] z-40 hidden-force">
         <div class="flex items-center gap-3">
@@ -364,9 +374,7 @@
         </div>
         <div class="flex items-center gap-3">
             <button onclick="handleSignOut()" class="text-[10px] opacity-40 hover:opacity-100 uppercase tracking-widest font-bold">Logout</button>
-            <button onclick="toggleTheme()" class="p-3 ripple rounded-full">
-                <span id="themeIcon">☀️</span>
-            </button>
+            <button onclick="location.hash='#settings'" class="p-3 ripple rounded-full text-lg" title="Settings">⚙️</button>
         </div>
     </header>
 
@@ -555,8 +563,12 @@
                 
                 <!-- Edit Mode Attachments -->
                 <div id="edit-attachments-container" class="border-t border-white/5 pt-4">
-                    <p class="text-[10px] uppercase opacity-50 mb-2">Attachments (Read Only in Edit Mode)</p>
+                    <p class="text-[10px] uppercase opacity-50 mb-2">Attachments</p>
                     <div id="edit-existing-attachments" class="flex flex-wrap gap-2 mb-2"></div>
+                    <label class="inline-flex items-center gap-2 text-xs bg-zinc-800 px-3 py-2 rounded-full cursor-pointer hover:bg-zinc-700 transition-colors">
+                        <span>+ Add attachment</span>
+                        <input type="file" class="hidden" onchange="handleEditFileSelect(this)">
+                    </label>
                 </div>
             </div>
         </section>
@@ -622,6 +634,87 @@
             <div id="todoContainer" class="space-y-2 pb-20"></div>
         </section>
 
+        <!-- Settings -->
+        <section id="settings" class="tab-content">
+            <h2 class="text-2xl google-sans mb-4 px-2">Settings</h2>
+            <div class="space-y-4">
+                <div class="material-card">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="font-medium">Theme</p>
+                            <p class="text-xs opacity-60">Switch between light and dark mode</p>
+                        </div>
+                        <button onclick="toggleTheme()" class="px-4 py-2 rounded-full bg-zinc-800 ripple text-sm font-medium">
+                            <span id="themeIcon">☀️</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="material-card border border-red-500/20">
+                    <p class="font-medium text-red-300">Delete Profile</p>
+                    <p class="text-xs opacity-60 mt-1">Permanently removes your public profile and username. Your account will remain active.</p>
+                    <button onclick="deleteMyProfile()" class="mt-4 w-full py-3 rounded-xl bg-red-500/20 text-red-300 font-medium ripple hover:bg-red-500/30 transition-colors">
+                        Delete Profile
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Admin -->
+        <section id="admin" class="tab-content">
+            <h2 class="text-2xl google-sans mb-4 px-2">Admin Panel</h2>
+            <div id="admin-access-denied" class="material-card text-sm text-red-300 hidden-force mb-4 border border-red-500/20">
+                You do not have permission to access this page.
+            </div>
+
+            <div id="admin-content" class="space-y-4 hidden-force">
+                <div class="material-card">
+                    <p class="font-medium mb-3">Moderation Actions</p>
+                    <div class="space-y-3">
+                        <input id="admin-target-uid" type="text" placeholder="Target user UID" class="w-full bg-transparent border border-white/10 focus:border-blue-400">
+                        <input id="admin-reason" type="text" placeholder="Reason (optional)" class="w-full bg-transparent border border-white/10 focus:border-blue-400">
+                        <div class="grid grid-cols-2 gap-2">
+                            <select id="admin-suspend-duration" class="w-full bg-transparent border border-white/10 focus:border-blue-400">
+                                <option value="1h">Suspend 1 hour</option>
+                                <option value="24h">Suspend 24 hours</option>
+                                <option value="7d">Suspend 7 days</option>
+                                <option value="30d">Suspend 30 days</option>
+                            </select>
+                            <button onclick="adminSuspendUser()" class="ripple rounded-xl bg-amber-500/20 text-amber-300 py-2 font-medium">Suspend User</button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="adminUnsuspendUser()" class="ripple rounded-xl bg-zinc-800 py-2 font-medium">Lift Suspension</button>
+                            <button onclick="adminBanUser()" class="ripple rounded-xl bg-red-500/20 text-red-300 py-2 font-medium">Ban User</button>
+                        </div>
+                        <button onclick="adminUnbanUser()" class="ripple rounded-xl bg-zinc-800 py-2 font-medium w-full">Unban User</button>
+                    </div>
+                </div>
+
+                <div class="material-card">
+                    <p class="font-medium mb-3">Unshare Shared Notes</p>
+                    <div class="flex gap-2 mb-3">
+                        <input id="admin-unshare-note-id" type="text" placeholder="Shared note ID" class="flex-1 bg-transparent border border-white/10 focus:border-blue-400">
+                        <button onclick="adminUnshareById()" class="ripple px-4 rounded-xl bg-red-500/20 text-red-300 font-medium">Unshare</button>
+                    </div>
+                    <div id="admin-shared-notes" class="space-y-2"></div>
+                </div>
+
+                <div class="material-card">
+                    <p class="font-medium mb-3">Banned & Suspended Users</p>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-xs uppercase opacity-60 mb-2">Suspended</p>
+                            <div id="admin-suspended-users" class="space-y-2"></div>
+                        </div>
+                        <div>
+                            <p class="text-xs uppercase opacity-60 mb-2">Banned</p>
+                            <div id="admin-banned-users" class="space-y-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
     </main>
 
     <nav id="appNav" class="fixed bottom-0 left-0 right-0 h-20 bg-[var(--md-sys-color-surface)] border-t border-white/5 flex items-center justify-around z-40 hidden-force backdrop-blur-lg bg-opacity-90">
@@ -644,6 +737,14 @@
         <a href="#planner" class="nav-item flex flex-col items-center gap-1">
             <div class="pill">📅</div>
             <span class="text-[11px] font-medium">Plan</span>
+        </a>
+        <a href="#settings" class="nav-item flex flex-col items-center gap-1">
+            <div class="pill">⚙️</div>
+            <span class="text-[11px] font-medium">Settings</span>
+        </a>
+        <a id="admin-nav-link" href="#admin" class="nav-item flex flex-col items-center gap-1 hidden-force">
+            <div class="pill">🛡️</div>
+            <span class="text-[11px] font-medium">Admin</span>
         </a>
     </nav>
 
@@ -695,15 +796,111 @@
         let currentNoteComments = [];
         let unsubscribeComments = null;
         let replyToId = null; // ID of comment being replied to
+        let commentProfilesCache = {}; // uid -> latest public profile data
         
         // Report State
-        let activeReport = null; // { type: 'note' | 'profile', id: string, content: string }
+        let activeReport = null; // { type: 'note' | 'profile' | 'comment', id: string, noteId?: string, content: string }
+        let currentUserIsAdmin = false;
+        let adminSharedNotes = [];
+        let currentAccountStatus = null; // null | { type: 'suspended' | 'banned', message: string }
 
         // Update Loader Message Helper
         const setBootStatus = (msg) => {
             const el = document.getElementById('boot-status');
             if (el) el.innerText = msg;
         };
+
+
+        async function refreshAdminStatus() {
+            if (!currentUser) {
+                currentUserIsAdmin = false;
+                return;
+            }
+
+            try {
+                const adminDoc = await getDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'admins', currentUser.uid));
+                currentUserIsAdmin = adminDoc.exists();
+            } catch (e) {
+                console.error('Admin status check failed', e);
+                currentUserIsAdmin = false;
+            }
+
+            const navLink = document.getElementById('admin-nav-link');
+            if (navLink) {
+                if (currentUserIsAdmin) navLink.classList.remove('hidden-force');
+                else navLink.classList.add('hidden-force');
+            }
+        }
+
+        window.closeAccountStatusModal = () => {
+            document.getElementById('accountStatusModal').classList.remove('active');
+        };
+
+        function showAccountStatusModal(status) {
+            currentAccountStatus = status;
+            const modal = document.getElementById('accountStatusModal');
+            const title = document.getElementById('account-status-title');
+            const message = document.getElementById('account-status-message');
+            const actions = document.getElementById('account-status-actions');
+
+            if (!modal || !title || !message || !actions) return;
+
+            title.innerText = status.type === 'banned' ? 'Account Banned' : 'Account Suspended';
+            message.innerText = status.message;
+
+            if (status.type === 'banned') {
+                actions.innerHTML = `<button onclick="handleSignOut()" class="w-full bg-red-400 text-red-950 py-3 rounded-xl font-bold ripple">Log Out</button>`;
+            } else {
+                actions.innerHTML = `
+                    <button onclick="closeAccountStatusModal()" class="flex-1 py-3 rounded-xl font-medium ripple hover:bg-white/5">Dismiss</button>
+                    <button onclick="handleSignOut()" class="flex-1 bg-red-400 text-red-950 py-3 rounded-xl font-bold ripple">Log Out</button>
+                `;
+            }
+
+            modal.classList.add('active');
+        }
+
+        async function checkAccountModerationState() {
+            if (!currentUser) return null;
+
+            try {
+                const bannedDoc = await getDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', currentUser.uid));
+                if (bannedDoc.exists()) {
+                    const data = bannedDoc.data() || {};
+                    return {
+                        type: 'banned',
+                        message: data.reason ? `Your account has been banned. Reason: ${data.reason}` : 'Your account has been banned due to policy violations.'
+                    };
+                }
+
+                const suspendedDoc = await getDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users', currentUser.uid));
+                if (suspendedDoc.exists()) {
+                    const data = suspendedDoc.data() || {};
+                    let until = null;
+
+                    if (data.until && typeof data.until.toDate === 'function') {
+                        until = data.until.toDate();
+                    } else if (typeof data.until === 'number') {
+                        until = new Date(data.until);
+                    } else if (typeof data.until === 'string') {
+                        const parsed = new Date(data.until);
+                        until = Number.isNaN(parsed.getTime()) ? null : parsed;
+                    }
+
+                    if (until && until.getTime() > Date.now()) {
+                        const untilText = until.toLocaleString();
+                        return {
+                            type: 'suspended',
+                            message: `Your account is suspended until ${untilText}.${data.reason ? ` Reason: ${data.reason}` : ''}`
+                        };
+                    }
+                }
+            } catch (e) {
+                console.error('Moderation status check failed', e);
+            }
+
+            return null;
+        }
 
         // --- Auth Logic ---
         window.toggleAuthMethod = (method) => {
@@ -753,7 +950,7 @@
             }
         }
 
-        window.handleSignOut = () => signOut(auth);
+        window.handleSignOut = () => { window.closeAccountStatusModal(); return signOut(auth); };
 
         onAuthStateChanged(auth, async (user) => {
             setBootStatus("Checking credentials...");
@@ -773,6 +970,9 @@
                     }
                 } catch(e) { console.error("Profile fetch error", e); }
 
+                await refreshAdminStatus();
+                const moderationState = await checkAccountModerationState();
+
                 // Show App UI (Hidden behind loader initially)
                 document.getElementById('authOverlay').classList.add('hidden-force');
                 document.getElementById('appHeader').classList.remove('hidden-force');
@@ -788,10 +988,19 @@
                 }
                 
                 handleRouting(); 
+
+                if (moderationState) {
+                    showAccountStatusModal(moderationState);
+                } else {
+                    window.closeAccountStatusModal();
+                }
                 
             } else {
                 currentUser = null;
                 currentUserProfile = null;
+                currentUserIsAdmin = false;
+                currentAccountStatus = null;
+                window.closeAccountStatusModal();
                 // Show Auth UI (Hidden behind loader initially)
                 document.getElementById('authOverlay').classList.remove('hidden-force');
                 document.getElementById('appHeader').classList.add('hidden-force');
@@ -1096,54 +1305,76 @@
             // data = { displayName, photoURL, username }
             if (!currentUser) return;
             const uid = currentUser.uid;
-            
+
             setBootStatus("Syncing changes across app...");
-            const batch = writeBatch(db);
-            let count = 0;
-            const MAX_BATCH = 450; 
+
+            const updates = [];
+            const MAX_BATCH = 450;
+
+            const commitChunkedUpdates = async () => {
+                for (let i = 0; i < updates.length; i += MAX_BATCH) {
+                    const batch = writeBatch(db);
+                    updates.slice(i, i + MAX_BATCH).forEach(({ ref, payload }) => {
+                        batch.update(ref, payload);
+                    });
+                    await batch.commit();
+                }
+            };
 
             try {
-                // 1. Update Notes
+                // 1. Update shared notes authored by this user
                 const notesQuery = query(
                     collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'),
                     where('authorId', '==', uid)
                 );
                 const notesSnap = await getDocs(notesQuery);
-                notesSnap.forEach(doc => {
-                    if (count < MAX_BATCH) {
-                        batch.update(doc.ref, {
+
+                notesSnap.forEach(noteDoc => {
+                    updates.push({
+                        ref: noteDoc.ref,
+                        payload: {
                             author: data.displayName,
                             authorUsername: data.username
-                        });
-                        count++;
-                    }
+                        }
+                    });
                 });
 
-                // 2. Update Comments
-                const commentsQuery = query(
-                    collectionGroup(db, 'comments'), 
-                    where('authorId', '==', uid)
-                );
-                
-                const commentsSnap = await getDocs(commentsQuery);
-                commentsSnap.forEach(doc => {
-                    if (doc.ref.path.includes(appId) && count < MAX_BATCH) {
-                        batch.update(doc.ref, {
-                            authorName: data.displayName,
-                            authorAvatar: data.photoURL,
-                            authorUsername: data.username
-                        });
-                        count++;
-                    }
-                });
+                // 2. Update comments under every shared note in this app
+                const allSharedNotesSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'));
+                for (const noteDoc of allSharedNotesSnap.docs) {
+                    const commentsSnap = await getDocs(query(
+                        collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteDoc.id, 'comments'),
+                        where('authorId', '==', uid)
+                    ));
 
-                if (count > 0) {
-                    await batch.commit();
+                    commentsSnap.forEach(commentDoc => {
+                        updates.push({
+                            ref: commentDoc.ref,
+                            payload: {
+                                authorName: data.displayName,
+                                authorAvatar: data.photoURL,
+                                authorUsername: data.username
+                            }
+                        });
+                    });
+                }
+
+                if (updates.length > 0) {
+                    await commitChunkedUpdates();
                 }
             } catch (e) {
                 console.warn("Sync warning:", e);
             }
-            setBootStatus(""); 
+
+            // Keep cache fresh so currently open comment threads update immediately
+            commentProfilesCache[uid] = {
+                displayName: data.displayName,
+                photoURL: data.photoURL,
+                username: data.username
+            };
+            if (location.hash.includes('/public')) renderComments();
+
+            setBootStatus("");
         }
 
         window.updateProfile = async () => {
@@ -1340,6 +1571,11 @@
                          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', activeReport.id), {
                              flagged: true
                          });
+                    } else if (activeReport.type === 'comment') {
+                         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', activeReport.noteId, 'comments', activeReport.id), {
+                             flagged: true,
+                             flaggedReason: reason || "Community Violation"
+                         });
                     }
                     alert("Report accepted. Content has been flagged and hidden.");
                     // Reload current view
@@ -1366,12 +1602,43 @@
             
             const commentsPath = collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId, 'comments');
             
-            unsubscribeComments = onSnapshot(commentsPath, (snap) => {
+            unsubscribeComments = onSnapshot(commentsPath, async (snap) => {
                 currentNoteComments = snap.docs.map(d => ({id: d.id, ...d.data()}));
                 // Sort by time
                 currentNoteComments.sort((a,b) => a.timestamp - b.timestamp);
+                await hydrateCommentAuthorsFromProfiles();
                 renderComments();
                 document.getElementById('comment-count').innerText = currentNoteComments.length;
+            });
+        }
+
+        async function hydrateCommentAuthorsFromProfiles() {
+            const missingAuthorIds = [...new Set(currentNoteComments
+                .map(c => c.authorId)
+                .filter(uid => uid && !commentProfilesCache[uid]))];
+
+            if (missingAuthorIds.length === 0) return;
+
+            await Promise.all(missingAuthorIds.map(async uid => {
+                try {
+                    const profileSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', uid));
+                    if (profileSnap.exists()) {
+                        commentProfilesCache[uid] = profileSnap.data();
+                    }
+                } catch (e) {
+                    console.warn('Could not hydrate profile for comment author:', uid, e);
+                }
+            }));
+
+            currentNoteComments = currentNoteComments.map(comment => {
+                const profile = comment.authorId ? commentProfilesCache[comment.authorId] : null;
+                if (!profile) return comment;
+                return {
+                    ...comment,
+                    authorName: profile.displayName || comment.authorName,
+                    authorAvatar: profile.photoURL || comment.authorAvatar,
+                    authorUsername: profile.username || comment.authorUsername
+                };
             });
         }
 
@@ -1380,8 +1647,9 @@
             container.innerHTML = "";
             
             // Separate parents and replies
-            const parents = currentNoteComments.filter(c => !c.parentId);
-            const replies = currentNoteComments.filter(c => c.parentId);
+            const visibleComments = currentNoteComments.filter(c => !c.hidden);
+            const parents = visibleComments.filter(c => !c.parentId);
+            const replies = visibleComments.filter(c => c.parentId);
 
             if (parents.length === 0) {
                 container.innerHTML = `<div class="text-center text-xs opacity-40 py-8">No comments yet. Be the first!</div>`;
@@ -1419,6 +1687,10 @@
             const div = document.createElement('div');
             div.className = "comment-thread flex gap-3";
             
+            const commentBody = comment.flagged
+                ? `<div class="text-xs text-red-300 bg-red-900/20 border border-red-500/20 rounded-lg p-2">⚠️ This comment has been flagged for review.</div>`
+                : `<div class="text-sm opacity-90 leading-relaxed break-words whitespace-pre-wrap">${comment.text}</div>`;
+
             div.innerHTML = `
                 <div class="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center font-bold text-xs shrink-0 select-none border border-white/10 overflow-hidden cursor-pointer" onclick="location.hash='#profiles/@${comment.authorUsername || 'unknown'}'">
                     ${comment.authorAvatar ? `<img src="${comment.authorAvatar}" class="w-full h-full object-cover">` : (comment.authorName ? comment.authorName[0].toUpperCase() : '?')}
@@ -1431,16 +1703,31 @@
                         ${comment.authorId === note?.authorId ? '<span class="text-[10px] bg-blue-900/30 text-blue-400 px-1.5 rounded uppercase tracking-wider">Owner</span>' : ''}
                         <span class="text-[10px] opacity-40">${new Date(comment.timestamp).toLocaleDateString()}</span>
                     </div>
-                    <div class="text-sm opacity-90 leading-relaxed break-words whitespace-pre-wrap">${comment.text}</div>
+                    ${commentBody}
                     
                     <div class="flex gap-4 mt-2">
-                        ${(!note?.commentsLocked || isOwner) ? `<button onclick="initReply('${comment.id}', '${comment.authorName}')" class="text-[11px] opacity-50 hover:opacity-100 hover:text-blue-400 font-medium transition-colors">Reply</button>` : ''}
+                        ${(!comment.flagged && (!note?.commentsLocked || isOwner)) ? `<button onclick="initReply('${comment.id}', '${comment.authorName}')" class="text-[11px] opacity-50 hover:opacity-100 hover:text-blue-400 font-medium transition-colors">Reply</button>` : ''}
+                        ${(!comment.flagged && !isMe) ? `<button onclick="initCommentReport('${comment.id}')" class="text-[11px] opacity-40 hover:opacity-100 hover:text-amber-400 transition-colors">Report</button>` : ''}
                         ${(isMe || isOwner) ? `<button onclick="deleteComment('${comment.id}')" class="text-[11px] opacity-40 hover:opacity-100 hover:text-red-400 transition-colors">Delete</button>` : ''}
                     </div>
                 </div>
             `;
             return div;
         }
+
+        window.initCommentReport = (commentId) => {
+            const noteId = location.hash.split('/')[1];
+            const comment = currentNoteComments.find(c => c.id === commentId);
+            if (!comment || !noteId) return;
+
+            activeReport = {
+                type: 'comment',
+                id: commentId,
+                noteId,
+                content: comment.text
+            };
+            document.getElementById('reportModal').classList.add('active');
+        };
 
         window.initReply = (id, name) => {
             replyToId = id;
@@ -1478,7 +1765,7 @@
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId, 'comments'), {
                     text: text,
                     authorId: currentUser.uid,
-                    authorName: currentUser.displayName || currentUser.email.split('@')[0],
+                    authorName: currentUserProfile?.displayName || currentUser.displayName || currentUser.email.split('@')[0],
                     authorUsername: currentUserProfile ? currentUserProfile.username : null, // Add username link
                     authorAvatar: currentUserProfile ? currentUserProfile.photoURL : null,
                     timestamp: Date.now(),
@@ -1662,10 +1949,28 @@
                      }
                 }
 
+                 const deletedAttachments = (note.editAttachments || []).filter(a => a.deleted);
+                 const keptAttachments = (note.editAttachments || []).filter(a => !a.deleted).map(({ deleted, ...rest }) => rest);
+                 const uploadedNewAttachments = [];
+
+                 for (const item of (note.pendingNewAttachments || [])) {
+                     const uploadResult = await uploadFileToStorage(currentUser.uid, item.file, item.id);
+                     uploadedNewAttachments.push({
+                         id: item.id,
+                         name: item.name,
+                         type: item.type,
+                         url: uploadResult.url,
+                         storagePath: uploadResult.storagePath
+                     });
+                 }
+
+                 const finalAttachments = [...keptAttachments, ...uploadedNewAttachments];
+
                  // Update Private
                  await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', currentEditingNoteId), {
                      text: val, 
                      date: new Date().toLocaleString(),
+                     attachments: finalAttachments,
                      flagged: false // Edit restores visibility if flagged
                  });
 
@@ -1674,8 +1979,28 @@
                      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', currentEditingNoteId), {
                          text: val,
                          date: new Date().toLocaleString(),
+                         attachments: finalAttachments,
                          flagged: false // Edit restores visibility
                      });
+                 }
+
+                 // Delete removed attachments from Storage as part of the save flow
+                 const deleteRefForAttachment = (att) => {
+                     if (att.storagePath) return ref(storage, att.storagePath);
+                     if (att.url) return ref(storage, att.url);
+                     return null;
+                 };
+
+                 const deletionResults = await Promise.allSettled(
+                     deletedAttachments
+                         .map(deleteRefForAttachment)
+                         .filter(Boolean)
+                         .map(fileRef => deleteObject(fileRef))
+                 );
+
+                 const failedDeletions = deletionResults.filter(r => r.status === 'rejected');
+                 if (failedDeletions.length > 0) {
+                     throw new Error(`${failedDeletions.length} attachment file(s) failed to delete from storage.`);
                  }
 
                  location.hash = `#notes/${currentEditingNoteId}`;
@@ -1772,7 +2097,7 @@
         // --- Rendering ---
         window.renderNotes = () => {
             const container = document.getElementById('notesContainer');
-            const list = noteViewMode === 'private' ? notes : sharedNotes;
+            const list = noteViewMode === 'private' ? notes : sharedNotes.filter(n => !n.hidden);
             
             if (list.length === 0) {
                 container.innerHTML = `<div class="p-8 text-center opacity-40">No ${noteViewMode === 'private' ? 'private' : 'community'} notes found.</div>`;
@@ -1818,6 +2143,316 @@
             `).join('');
         };
 
+        // --- Admin Tools ---
+        function parseSuspendDuration(value) {
+            const unit = value.endsWith('d') ? 'd' : 'h';
+            const amount = parseInt(value, 10);
+            if (Number.isNaN(amount) || amount <= 0) return 3600000;
+            return unit === 'd' ? amount * 24 * 60 * 60 * 1000 : amount * 60 * 60 * 1000;
+        }
+
+        window.renderAdminPage = async () => {
+            if (!currentUserIsAdmin) return;
+            const container = document.getElementById('admin-shared-notes');
+            if (!container) return;
+
+            container.innerHTML = '<div class="text-xs opacity-60">Loading shared notes...</div>';
+            try {
+                const snap = await getDocs(query(
+                    collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'),
+                    orderBy('timestamp', 'desc'),
+                    limit(20)
+                ));
+                adminSharedNotes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                if (adminSharedNotes.length === 0) {
+                    container.innerHTML = '<div class="text-xs opacity-60">No shared notes found.</div>';
+                    await renderAdminUserStatusLists();
+                    return;
+                }
+
+                container.innerHTML = adminSharedNotes.map(n => `
+                    <div class="flex items-center gap-2 p-2 rounded-lg bg-black/20 border border-white/5">
+                        <div class="flex-1 min-w-0">
+                            <div class="text-xs font-mono truncate">${n.id}</div>
+                            <div class="text-xs opacity-70 truncate">${(n.text || '').slice(0, 80) || 'Untitled'}</div>
+                        </div>
+                        <button onclick="adminUnshareNote('${n.id}')" class="text-xs px-3 py-1 rounded-full bg-red-500/20 text-red-300 ripple">Unshare</button>
+                    </div>
+                `).join('');
+
+                await renderAdminUserStatusLists();
+            } catch (e) {
+                console.error(e);
+                container.innerHTML = '<div class="text-xs text-red-300">Could not load notes.</div>';
+            }
+        };
+
+        async function renderAdminUserStatusLists() {
+            const suspendedContainer = document.getElementById('admin-suspended-users');
+            const bannedContainer = document.getElementById('admin-banned-users');
+            if (!suspendedContainer || !bannedContainer) return;
+
+            suspendedContainer.innerHTML = '<div class="text-xs opacity-60">Loading...</div>';
+            bannedContainer.innerHTML = '<div class="text-xs opacity-60">Loading...</div>';
+
+            try {
+                const [suspendedSnap, bannedSnap] = await Promise.all([
+                    getDocs(query(collection(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users'), limit(25))),
+                    getDocs(query(collection(db, 'artifacts', appId, 'moderation', 'main', 'banned_users'), limit(25)))
+                ]);
+
+                const suspendedUsers = suspendedSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const bannedUsers = bannedSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                if (suspendedUsers.length === 0) {
+                    suspendedContainer.innerHTML = '<div class="text-xs opacity-60">No suspended users.</div>';
+                } else {
+                    suspendedContainer.innerHTML = suspendedUsers.map(u => {
+                        const until = u.until && typeof u.until.toDate === 'function' ? u.until.toDate().toLocaleString() : 'Unknown';
+                        return `
+                            <div class="p-2 rounded-lg bg-black/20 border border-white/5">
+                                <div class="text-xs font-mono truncate">${u.id}</div>
+                                <div class="text-[11px] opacity-70 truncate">Until: ${until}</div>
+                                <button onclick="adminUnsuspendSpecific('${u.id}')" class="mt-2 text-xs px-3 py-1 rounded-full bg-zinc-800 ripple">Unsuspend</button>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                if (bannedUsers.length === 0) {
+                    bannedContainer.innerHTML = '<div class="text-xs opacity-60">No banned users.</div>';
+                } else {
+                    bannedContainer.innerHTML = bannedUsers.map(u => `
+                        <div class="p-2 rounded-lg bg-black/20 border border-white/5">
+                            <div class="text-xs font-mono truncate">${u.id}</div>
+                            <div class="text-[11px] opacity-70 truncate">${u.reason || 'No reason provided'}</div>
+                            <button onclick="adminUnbanSpecific('${u.id}')" class="mt-2 text-xs px-3 py-1 rounded-full bg-zinc-800 ripple">Unban</button>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                console.error(e);
+                suspendedContainer.innerHTML = '<div class="text-xs text-red-300">Failed to load suspended users.</div>';
+                bannedContainer.innerHTML = '<div class="text-xs text-red-300">Failed to load banned users.</div>';
+            }
+        }
+
+        window.adminUnsuspendSpecific = async (uid) => {
+            if (!currentUserIsAdmin) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users', uid));
+                await renderAdminUserStatusLists();
+            } catch (e) {
+                console.error(e);
+                alert('Failed to unsuspend user.');
+            }
+        };
+
+        window.adminUnbanSpecific = async (uid) => {
+            if (!currentUserIsAdmin) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid));
+                try {
+                    await setUserPublicContentVisibility(uid, false);
+                } catch (visibilityError) {
+                    console.warn('Unban applied but visibility restore sync failed:', visibilityError);
+                }
+                await renderAdminUserStatusLists();
+            } catch (e) {
+                console.error(e);
+                alert(`Failed to unban user: ${e.message || 'Unknown error'}`);
+            }
+        };
+
+        window.adminUnshareNote = async (noteId) => {
+            if (!currentUserIsAdmin) return;
+            if (!confirm(`Unshare note ${noteId}?`)) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId));
+                adminSharedNotes = adminSharedNotes.filter(n => n.id !== noteId);
+                renderAdminPage();
+            } catch (e) {
+                console.error(e);
+                alert('Failed to unshare note.');
+            }
+        };
+
+        window.adminUnshareById = async () => {
+            const noteId = document.getElementById('admin-unshare-note-id').value.trim();
+            if (!noteId) return;
+            await adminUnshareNote(noteId);
+            document.getElementById('admin-unshare-note-id').value = '';
+        };
+
+        window.adminSuspendUser = async () => {
+            if (!currentUserIsAdmin) return;
+            const uid = document.getElementById('admin-target-uid').value.trim();
+            const reason = document.getElementById('admin-reason').value.trim();
+            const duration = document.getElementById('admin-suspend-duration').value;
+            if (!uid) return alert('Target UID required.');
+
+            const until = new Date(Date.now() + parseSuspendDuration(duration));
+            try {
+                await setDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users', uid), {
+                    uid,
+                    reason: reason || 'Policy violation',
+                    until,
+                    suspendedBy: currentUser.uid,
+                    createdAt: Date.now()
+                });
+                alert('User suspended successfully.');
+                await renderAdminUserStatusLists();
+            } catch (e) {
+                console.error(e);
+                alert('Failed to suspend user.');
+            }
+        };
+
+        window.adminUnsuspendUser = async () => {
+            if (!currentUserIsAdmin) return;
+            const uid = document.getElementById('admin-target-uid').value.trim();
+            if (!uid) return alert('Target UID required.');
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users', uid));
+                alert('Suspension removed.');
+                await renderAdminUserStatusLists();
+            } catch (e) {
+                console.error(e);
+                alert('Failed to remove suspension.');
+            }
+        };
+
+        async function setUserPublicContentVisibility(uid, isHidden, reason = '') {
+            const safeReason = reason || 'Moderation content action';
+            const MAX_BATCH = 400;
+
+            const commitUpdatesInChunks = async (updates, throwOnError = true) => {
+                for (let i = 0; i < updates.length; i += MAX_BATCH) {
+                    const batch = writeBatch(db);
+                    updates.slice(i, i + MAX_BATCH).forEach(({ ref, payload }) => batch.update(ref, payload));
+                    if (throwOnError) {
+                        await batch.commit();
+                    } else {
+                        try {
+                            await batch.commit();
+                        } catch (e) {
+                            console.warn('Non-critical moderation sync batch failed:', e);
+                        }
+                    }
+                }
+            };
+
+            // PHASE 1 (critical): profile + shared notes
+            const primaryUpdates = [];
+
+            const profileRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', uid);
+            const profileSnap = await getDoc(profileRef);
+            if (profileSnap.exists()) {
+                primaryUpdates.push({
+                    ref: profileRef,
+                    payload: {
+                        hidden: isHidden,
+                        flagged: isHidden
+                    }
+                });
+            }
+
+            const notesSnap = await getDocs(query(
+                collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'),
+                where('authorId', '==', uid)
+            ));
+
+            notesSnap.forEach(noteDoc => {
+                primaryUpdates.push({
+                    ref: noteDoc.ref,
+                    payload: {
+                        flagged: isHidden,
+                        hidden: isHidden,
+                        flaggedReason: isHidden ? safeReason : null,
+                        commentsDisabled: isHidden ? true : false
+                    }
+                });
+            });
+
+            await commitUpdatesInChunks(primaryUpdates, true);
+
+            // PHASE 2 (best effort): comments (per-note queries inside this app)
+            const secondaryUpdates = [];
+            const sharedNotesSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes'));
+
+            for (const sharedNoteDoc of sharedNotesSnap.docs) {
+                try {
+                    const commentSnap = await getDocs(query(
+                        collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', sharedNoteDoc.id, 'comments'),
+                        where('authorId', '==', uid)
+                    ));
+
+                    commentSnap.forEach(commentDoc => {
+                        secondaryUpdates.push({
+                            ref: commentDoc.ref,
+                            payload: {
+                                hidden: isHidden,
+                                flagged: isHidden,
+                                flaggedReason: isHidden ? safeReason : null
+                            }
+                        });
+                    });
+                } catch (e) {
+                    console.warn('Skipping comment sync for note due to query error:', sharedNoteDoc.id, e);
+                }
+            }
+
+            await commitUpdatesInChunks(secondaryUpdates, false);
+        }
+
+        window.adminBanUser = async () => {
+            if (!currentUserIsAdmin) return;
+            const uid = document.getElementById('admin-target-uid').value.trim();
+            const reason = document.getElementById('admin-reason').value.trim();
+            if (!uid) return alert('Target UID required.');
+            try {
+                const banReason = reason || 'Policy violation';
+                await setDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid), {
+                    uid,
+                    reason: banReason,
+                    bannedBy: currentUser.uid,
+                    createdAt: Date.now()
+                });
+                try {
+                    await setUserPublicContentVisibility(uid, true, banReason);
+                    alert('User banned successfully and public content hidden.');
+                } catch (visibilityError) {
+                    console.warn('Ban applied but content hide sync failed:', visibilityError);
+                    alert('User banned, but some public content could not be hidden immediately.');
+                }
+                await renderAdminUserStatusLists();
+            } catch (e) {
+                console.error(e);
+                alert(`Failed to ban user: ${e.message || 'Unknown error'}`);
+            }
+        };
+
+        window.adminUnbanUser = async () => {
+            if (!currentUserIsAdmin) return;
+            const uid = document.getElementById('admin-target-uid').value.trim();
+            if (!uid) return alert('Target UID required.');
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid));
+                try {
+                    await setUserPublicContentVisibility(uid, false);
+                    alert('Ban removed and public content restored.');
+                } catch (visibilityError) {
+                    console.warn('Unban applied but content restore sync failed:', visibilityError);
+                    alert('Ban removed, but some content could not be restored automatically.');
+                }
+                await renderAdminUserStatusLists();
+            } catch (e) {
+                console.error(e);
+                alert(`Failed to remove ban: ${e.message || 'Unknown error'}`);
+            }
+        };
+
         // --- Navigation ---
         window.handleRouting = () => {
             const hash = window.location.hash || '#calculator';
@@ -1843,6 +2478,20 @@
                 document.getElementById('profile').classList.add('active');
                 renderProfileUI(null); // Own profile
                 updateNavState('#profile');
+                return;
+            }
+
+            if (hash === '#admin') {
+                if (!currentUserIsAdmin) {
+                    location.hash = '#calculator';
+                    return;
+                }
+
+                document.getElementById('admin').classList.add('active');
+                document.getElementById('admin-access-denied').classList.add('hidden-force');
+                document.getElementById('admin-content').classList.remove('hidden-force');
+                renderAdminPage();
+                updateNavState('#admin');
                 return;
             }
 
@@ -1924,8 +2573,16 @@
             
             const contentDiv = document.getElementById('note-detail-content');
             
-            // Check Flagged Status for Viewer
-            if (note.flagged) {
+            // Check Moderation Hidden/Flagged Status for Viewer
+            if (note.hidden) {
+                contentDiv.innerHTML = `
+                    <div class="flagged-overlay">
+                        <div class="text-4xl">🚫</div>
+                        <div class="flagged-title">Content Hidden</div>
+                        <p class="text-sm opacity-90">This content has been hidden by moderation.</p>
+                    </div>
+                `;
+            } else if (note.flagged) {
                 contentDiv.innerHTML = `
                     <div class="flagged-overlay">
                         <div class="text-4xl">⚠️</div>
@@ -2004,11 +2661,61 @@
             currentEditingNoteId = id;
             document.getElementById('note-edit-area').value = note.text;
             
-            // Render read-only existing attachments in edit view
-            const attContainer = document.getElementById('edit-existing-attachments');
-            attContainer.innerHTML = (note.attachments || []).map(a => 
-                `<span class="text-[10px] bg-zinc-800 px-2 py-1 rounded text-white/50">${a.name}</span>`
-            ).join('');
+            // Initialize editable attachment state for edit mode
+            note.editAttachments = (note.attachments || []).map(att => ({ ...att, deleted: false }));
+            note.pendingNewAttachments = [];
+
+            const renderEditAttachments = () => {
+                const attContainer = document.getElementById('edit-existing-attachments');
+                attContainer.innerHTML = [
+                    ...note.editAttachments.map((a, idx) => `
+                        <div class="attachment-tag ${a.deleted ? 'deleted' : ''}">
+                            <span class="truncate max-w-[150px]">${a.name}</span>
+                            <button onclick="toggleEditAttachmentDelete(${idx})" title="${a.deleted ? 'Restore' : 'Remove'}">${a.deleted ? '↺' : '✕'}</button>
+                        </div>
+                    `),
+                    ...note.pendingNewAttachments.map((a, idx) => `
+                        <div class="attachment-tag">
+                            <span class="truncate max-w-[150px]">${a.name}</span>
+                            <button onclick="removePendingEditAttachment(${idx})" title="Remove">✕</button>
+                        </div>
+                    `)
+                ].join('');
+            };
+
+            window.toggleEditAttachmentDelete = (idx) => {
+                note.editAttachments[idx].deleted = !note.editAttachments[idx].deleted;
+                renderEditAttachments();
+            };
+
+            window.handleEditFileSelect = (input) => {
+                if (input.files && input.files[0]) {
+                    const file = input.files[0];
+                    const existsInCurrent = note.editAttachments.some(a => a.name === file.name && !a.deleted);
+                    const existsInNew = note.pendingNewAttachments.some(a => a.name === file.name);
+                    if (existsInCurrent || existsInNew) {
+                        alert('This file is already attached.');
+                        input.value = '';
+                        return;
+                    }
+
+                    note.pendingNewAttachments.push({
+                        id: crypto.randomUUID(),
+                        name: file.name,
+                        type: file.type,
+                        file
+                    });
+                    renderEditAttachments();
+                    input.value = '';
+                }
+            };
+
+            window.removePendingEditAttachment = (idx) => {
+                note.pendingNewAttachments.splice(idx, 1);
+                renderEditAttachments();
+            };
+
+            renderEditAttachments();
 
             document.getElementById('cancel-edit-btn').onclick = () => location.hash = `#notes/${id}`;
             document.getElementById('update-note-btn').onclick = () => saveEditNote(); 
@@ -2106,8 +2813,43 @@
 
         window.toggleTheme = () => {
             document.body.classList.toggle('light');
-            document.getElementById('themeIcon').innerText = document.body.classList.contains('light') ? '🌙' : '☀️';
+            const icon = document.getElementById('themeIcon');
+            if (icon) icon.innerText = document.body.classList.contains('light') ? '🌙' : '☀️';
             if(window.location.hash === '#graph') drawGraph();
+        };
+
+        window.deleteMyProfile = async () => {
+            if (!currentUser || !currentUserProfile) {
+                alert('No profile found to delete.');
+                return;
+            }
+
+            const confirmed = confirm('Delete your profile? This removes your public profile and username permanently.');
+            if (!confirmed) return;
+
+            const secondConfirm = prompt('Type DELETE to confirm profile deletion.');
+            if (secondConfirm !== 'DELETE') {
+                alert('Profile deletion cancelled.');
+                return;
+            }
+
+            try {
+                const username = currentUserProfile.username;
+
+                await Promise.all([
+                    deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', currentUser.uid)),
+                    username ? deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'usernames', username)) : Promise.resolve(),
+                    deleteObject(ref(storage, `users/${currentUser.uid}/avatar/profile.jpg`)).catch(() => null)
+                ]);
+
+                currentUserProfile = null;
+                alert('Profile deleted. You can create a new one anytime.');
+                location.hash = '#profile';
+                renderProfileUI();
+            } catch (e) {
+                console.error(e);
+                alert('Could not delete profile. Please try again.');
+            }
         };
 
         document.addEventListener('mousedown', (e) => {
@@ -2130,4 +2872,3 @@
     </script>
 </body>
 </html>
-
