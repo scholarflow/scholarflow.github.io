@@ -260,6 +260,35 @@
             opacity: 0.3;
         }
 
+        /* Profile Kebab Menu */
+        .profile-menu {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            z-index: 10;
+        }
+        .profile-menu-dropdown {
+            position: absolute;
+            right: 0;
+            top: 42px;
+            min-width: 180px;
+            background: var(--md-sys-color-secondary-container);
+            border: 1px solid var(--md-sys-color-surface-variant);
+            border-radius: 12px;
+            padding: 6px;
+            display: none;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+        .profile-menu-dropdown.active { display: block; }
+        .profile-menu-dropdown button {
+            width: 100%;
+            text-align: left;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+        .profile-menu-dropdown button:hover { background: rgba(255,255,255,0.06); }
+
         /* Profile Styles */
         .profile-header-bg {
             height: 120px;
@@ -1048,6 +1077,44 @@
 
 
         // --- Profile Management ---
+        window.toggleProfileMenu = () => {
+            const menu = document.getElementById('profile-menu-dropdown');
+            if (!menu) return;
+            menu.classList.toggle('active');
+        };
+
+        window.copyProfileUsername = async (username) => {
+            await navigator.clipboard.writeText(`@${username}`);
+            alert('Username copied!');
+            const menu = document.getElementById('profile-menu-dropdown');
+            if (menu) menu.classList.remove('active');
+        };
+
+        window.copyProfileUid = async (uid) => {
+            await navigator.clipboard.writeText(uid);
+            alert('User ID copied!');
+            const menu = document.getElementById('profile-menu-dropdown');
+            if (menu) menu.classList.remove('active');
+        };
+
+        window.copyProfileLink = async (username) => {
+            await navigator.clipboard.writeText(`${window.location.origin}/#profiles/@${username}`);
+            alert('Profile link copied!');
+            const menu = document.getElementById('profile-menu-dropdown');
+            if (menu) menu.classList.remove('active');
+        };
+
+        window.reportProfileFromMenu = (uid, displayName, bio) => {
+            activeReport = {
+                type: 'profile',
+                id: uid,
+                content: `Name: ${displayName}
+Bio: ${bio}`
+            };
+            const menu = document.getElementById('profile-menu-dropdown');
+            if (menu) menu.classList.remove('active');
+            document.getElementById('reportModal').classList.add('active');
+        };
 
         window.renderProfileUI = async (targetUsername = null) => {
             const container = document.getElementById('profile-container');
@@ -1109,8 +1176,6 @@
                         return;
                     }
 
-                    // Show report button if it's not me
-                    reportBtn.classList.remove('hidden-force');
                     // Setup active report data for profile
                     activeReport = { 
                         type: 'profile', 
@@ -1138,6 +1203,15 @@
                     // Render Public View
                     container.innerHTML = `
                          <div class="material-card relative overflow-hidden">
+                            <div class="profile-menu">
+                                <button onclick="toggleProfileMenu()" class="w-9 h-9 rounded-full bg-black/30 hover:bg-black/50 transition-colors">⋮</button>
+                                <div id="profile-menu-dropdown" class="profile-menu-dropdown">
+                                    <button onclick="reportProfileFromMenu('${targetUid}', ${JSON.stringify(profileData.displayName || '')}, ${JSON.stringify(profileData.bio || '')})">Report</button>
+                                    <button onclick="copyProfileUsername('${profileData.username}')">Copy Username</button>
+                                    <button onclick="copyProfileUid('${targetUid}')">Copy User ID</button>
+                                    <button onclick="copyProfileLink('${profileData.username}')">Copy Link</button>
+                                </div>
+                            </div>
                             <div class="profile-header-bg"></div>
                             <div class="profile-avatar-xl">
                                 ${profileData.photoURL ? `<img src="${profileData.photoURL}" alt="avatar">` : (profileData.displayName || '?')[0]}
@@ -2854,6 +2928,12 @@
                 alert('Could not delete profile. Please try again.');
             }
         };
+
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('profile-menu-dropdown');
+            if (!menu) return;
+            if (!e.target.closest('.profile-menu')) menu.classList.remove('active');
+        });
 
         document.addEventListener('mousedown', (e) => {
             const btn = e.target.closest('.ripple');
