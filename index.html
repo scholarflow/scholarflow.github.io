@@ -1150,7 +1150,11 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
 
             // 3. Viewing Public Profile
             if (targetUsername) {
-                const cleanUsername = targetUsername.replace('@', '').toLowerCase();
+                const cleanUsername = (targetUsername || '').trim().replace(/^@+/, '').toLowerCase();
+                if (!cleanUsername) {
+                    container.innerHTML = `<div class="text-center p-8 opacity-50">Invalid profile link.</div>`;
+                    return;
+                }
                 
                 try {
                     // Check if viewing self via link
@@ -1185,7 +1189,7 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                     actionsBtn.classList.remove('hidden-force');
 
                     // Privacy Check
-                    if (profileData.hidden && targetUid !== currentUser.uid) {
+                    if (profileData.hidden && targetUid !== currentUser?.uid) {
                         container.innerHTML = `
                              <div class="material-card text-center p-8">
                                 <div class="text-4xl mb-4">🔒</div>
@@ -1219,6 +1223,14 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                          `;
                          return;
                     }
+
+                    currentViewedProfileMenuData = {
+                        uid: targetUid,
+                        username: profileData.username,
+                        displayName: profileData.displayName,
+                        bio: profileData.bio || ''
+                    };
+                    actionsBtn.classList.remove('hidden-force');
 
                     // Render Public View
                     container.innerHTML = `
@@ -2566,7 +2578,7 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                 return;
             }
             if (hash.startsWith('#profiles/@')) {
-                const username = hash.split('@')[1];
+                const username = decodeURIComponent(hash.split('@')[1] || '').split('?')[0];
                 document.getElementById('profile').classList.add('active');
                 renderProfileUI(username);
                 return;
