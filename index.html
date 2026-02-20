@@ -260,34 +260,31 @@
             opacity: 0.3;
         }
 
-        /* Profile Kebab Menu */
-        .profile-menu {
-            position: absolute;
-            top: 16px;
-            right: 16px;
-            z-index: 10;
-        }
-        .profile-menu-dropdown {
+        /* Profile Actions Menu */
+        .profile-actions-wrap { position: relative; }
+        .profile-actions-dropdown {
             position: absolute;
             right: 0;
-            top: 42px;
-            min-width: 180px;
+            top: calc(100% + 8px);
+            min-width: 190px;
             background: var(--md-sys-color-secondary-container);
             border: 1px solid var(--md-sys-color-surface-variant);
-            border-radius: 12px;
+            border-radius: 14px;
             padding: 6px;
             display: none;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+            z-index: 20;
         }
-        .profile-menu-dropdown.active { display: block; }
-        .profile-menu-dropdown button {
+        .profile-actions-dropdown.active { display: block; }
+        .profile-actions-dropdown button {
             width: 100%;
             text-align: left;
             padding: 10px 12px;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 0.85rem;
+            transition: background 0.15s;
         }
-        .profile-menu-dropdown button:hover { background: rgba(255,255,255,0.06); }
+        .profile-actions-dropdown button:hover { background: rgba(255,255,255,0.06); }
 
         /* Profile Styles */
         .profile-header-bg {
@@ -609,10 +606,16 @@
         <section id="profile" class="tab-content">
             <div class="flex justify-between items-center mb-4 px-2">
                 <h2 class="text-2xl google-sans">Profile</h2>
-                <div class="flex gap-2">
-                     <button id="report-profile-btn" onclick="initProfileReport()" class="ripple p-2 rounded-full bg-red-900/30 text-red-400 hidden-force" title="Report Profile">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-                     </button>
+                <div class="flex gap-2 items-center">
+                     <div class="profile-actions-wrap">
+                         <button id="profile-actions-btn" onclick="toggleProfileActionsMenu()" class="ripple p-2 rounded-full bg-zinc-800 text-blue-400 hidden-force" title="Profile actions">⋮</button>
+                         <div id="profile-actions-dropdown" class="profile-actions-dropdown">
+                             <button onclick="reportCurrentViewedProfile()">Report</button>
+                             <button onclick="copyCurrentViewedProfileUsername()">Copy Username</button>
+                             <button onclick="copyCurrentViewedProfileUid()">Copy User ID</button>
+                             <button onclick="copyCurrentViewedProfileLink()">Copy Link</button>
+                         </div>
+                     </div>
                      <button onclick="location.hash='#profiles/search'" class="ripple p-2 rounded-full bg-zinc-800 text-blue-400">
                           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                      </button>
@@ -1077,51 +1080,60 @@
 
 
         // --- Profile Management ---
-        window.toggleProfileMenu = () => {
-            const menu = document.getElementById('profile-menu-dropdown');
+        let currentViewedProfileMenuData = null; // { uid, username, displayName, bio }
+
+        window.toggleProfileActionsMenu = () => {
+            const menu = document.getElementById('profile-actions-dropdown');
             if (!menu) return;
             menu.classList.toggle('active');
         };
 
-        window.copyProfileUsername = async (username) => {
-            await navigator.clipboard.writeText(`@${username}`);
+        window.closeProfileActionsMenu = () => {
+            const menu = document.getElementById('profile-actions-dropdown');
+            if (menu) menu.classList.remove('active');
+        };
+
+        window.copyCurrentViewedProfileUsername = async () => {
+            if (!currentViewedProfileMenuData?.username) return;
+            await navigator.clipboard.writeText(`@${currentViewedProfileMenuData.username}`);
             alert('Username copied!');
-            const menu = document.getElementById('profile-menu-dropdown');
-            if (menu) menu.classList.remove('active');
+            closeProfileActionsMenu();
         };
 
-        window.copyProfileUid = async (uid) => {
-            await navigator.clipboard.writeText(uid);
+        window.copyCurrentViewedProfileUid = async () => {
+            if (!currentViewedProfileMenuData?.uid) return;
+            await navigator.clipboard.writeText(currentViewedProfileMenuData.uid);
             alert('User ID copied!');
-            const menu = document.getElementById('profile-menu-dropdown');
-            if (menu) menu.classList.remove('active');
+            closeProfileActionsMenu();
         };
 
-        window.copyProfileLink = async (username) => {
-            await navigator.clipboard.writeText(`${window.location.origin}/#profiles/@${username}`);
+        window.copyCurrentViewedProfileLink = async () => {
+            if (!currentViewedProfileMenuData?.username) return;
+            await navigator.clipboard.writeText(`${window.location.origin}/#profiles/@${currentViewedProfileMenuData.username}`);
             alert('Profile link copied!');
-            const menu = document.getElementById('profile-menu-dropdown');
-            if (menu) menu.classList.remove('active');
+            closeProfileActionsMenu();
         };
 
-        window.reportProfileFromMenu = (uid, displayName, bio) => {
+        window.reportCurrentViewedProfile = () => {
+            if (!currentViewedProfileMenuData?.uid) return;
             activeReport = {
                 type: 'profile',
-                id: uid,
-                content: `Name: ${displayName}
-Bio: ${bio}`
+                id: currentViewedProfileMenuData.uid,
+                content: `Name: ${currentViewedProfileMenuData.displayName || ''}
+Bio: ${currentViewedProfileMenuData.bio || ''}`
             };
-            const menu = document.getElementById('profile-menu-dropdown');
-            if (menu) menu.classList.remove('active');
+            closeProfileActionsMenu();
             document.getElementById('reportModal').classList.add('active');
         };
 
         window.renderProfileUI = async (targetUsername = null) => {
             const container = document.getElementById('profile-container');
-            const reportBtn = document.getElementById('report-profile-btn');
+            const actionsBtn = document.getElementById('profile-actions-btn');
             
-            // Hide report button by default
-            reportBtn.classList.add('hidden-force');
+            // Hide actions by default
+            currentViewedProfileMenuData = null;
+            closeProfileActionsMenu();
+            actionsBtn.classList.add('hidden-force');
             container.innerHTML = '<div class="spinner mx-auto mt-10"></div>';
             
             // 1. Viewing Own Profile (or no username specified)
@@ -1163,6 +1175,14 @@ Bio: ${bio}`
                     }
 
                     const profileData = profileDoc.data();
+
+                    currentViewedProfileMenuData = {
+                        uid: targetUid,
+                        username: profileData.username,
+                        displayName: profileData.displayName,
+                        bio: profileData.bio || ''
+                    };
+                    actionsBtn.classList.remove('hidden-force');
 
                     // Privacy Check
                     if (profileData.hidden && targetUid !== currentUser.uid) {
@@ -2930,9 +2950,9 @@ Bio: ${bio}`
         };
 
         document.addEventListener('click', (e) => {
-            const menu = document.getElementById('profile-menu-dropdown');
+            const menu = document.getElementById('profile-actions-dropdown');
             if (!menu) return;
-            if (!e.target.closest('.profile-menu')) menu.classList.remove('active');
+            if (!e.target.closest('.profile-actions-wrap')) menu.classList.remove('active');
         });
 
         document.addEventListener('mousedown', (e) => {
