@@ -286,6 +286,13 @@
         }
         .profile-actions-dropdown button:hover { background: rgba(255,255,255,0.06); }
 
+        /* Defensive: hide any legacy in-card profile menu remnants */
+        .profile-menu,
+        .profile-menu-dropdown,
+        #profile-menu-dropdown {
+            display: none !important;
+        }
+
         /* Profile Styles */
         .profile-header-bg {
             height: 120px;
@@ -1129,11 +1136,16 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
         window.renderProfileUI = async (targetUsername = null) => {
             const container = document.getElementById('profile-container');
             const actionsBtn = document.getElementById('profile-actions-btn');
+
+            const removeLegacyProfileMenus = () => {
+                document.querySelectorAll('.profile-menu, .profile-menu-dropdown, #profile-menu-dropdown').forEach(el => el.remove());
+            };
             
             // Hide actions by default
             currentViewedProfileMenuData = null;
             closeProfileActionsMenu();
             actionsBtn.classList.add('hidden-force');
+            removeLegacyProfileMenus();
             container.innerHTML = '<div class="spinner mx-auto mt-10"></div>';
             
             // 1. Viewing Own Profile (or no username specified)
@@ -1255,6 +1267,8 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                             </div>
                         </div>
                     `;
+
+                    removeLegacyProfileMenus();
 
                 } catch(e) {
                     console.error(e);
