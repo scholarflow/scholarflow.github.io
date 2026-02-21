@@ -412,17 +412,6 @@
         </div>
     </div>
 
-    <!-- Strike Warning Modal -->
-    <div id="strikeWarningModal" class="modal-overlay">
-        <div class="material-card w-full max-w-sm space-y-4 border border-amber-500/30">
-            <h3 class="text-xl font-bold text-amber-300">Suspension Warning</h3>
-            <p id="strike-warning-message" class="text-sm opacity-85"></p>
-            <div class="pt-2">
-                <button onclick="dismissStrikeWarning()" class="w-full py-3 rounded-xl bg-amber-500/20 text-amber-300 font-medium ripple">Dismiss</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Main App UI -->
     <header id="appHeader" class="p-4 flex justify-between items-center sticky top-0 bg-[var(--md-sys-color-surface)] z-40 hidden-force">
         <div class="flex items-center gap-3">
@@ -713,27 +702,6 @@
                     </div>
                 </div>
 
-                <div class="material-card">
-                    <div class="flex items-start justify-between gap-3">
-                        <div>
-                            <p class="font-medium">Account Moderation</p>
-                            <p class="text-xs opacity-60 mt-1">View your strike count, warning state, and current account status.</p>
-                        </div>
-                        <span id="settings-account-status-pill" class="text-[10px] px-2 py-1 rounded-full bg-zinc-800 opacity-80">Active</span>
-                    </div>
-                    <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
-                        <div class="rounded-xl bg-black/10 p-3">
-                            <p class="text-[11px] uppercase tracking-wide opacity-60">Strikes</p>
-                            <p id="settings-strike-count" class="text-xl font-semibold">0</p>
-                        </div>
-                        <div class="rounded-xl bg-black/10 p-3">
-                            <p class="text-[11px] uppercase tracking-wide opacity-60">Next Action</p>
-                            <p id="settings-next-action" class="text-xs mt-1 opacity-90">Warning at 2 strikes</p>
-                        </div>
-                    </div>
-                    <p id="settings-account-status" class="text-xs opacity-70 mt-3">No active restrictions.</p>
-                </div>
-
                 <div class="material-card border border-red-500/20">
                     <p class="font-medium text-red-300">Delete Profile</p>
                     <p class="text-xs opacity-60 mt-1">Permanently removes your public profile and username. Your account will remain active.</p>
@@ -887,7 +855,6 @@
         let currentUserIsAdmin = false;
         let adminSharedNotes = [];
         let currentAccountStatus = null; // null | { type: 'suspended' | 'banned', message: string }
-        let currentStrikeData = { violationCount: 0, warningDismissedAtCount: 0, escalationLevel: 0 };
 
         // Update Loader Message Helper
         const setBootStatus = (msg) => {
@@ -920,164 +887,6 @@
         window.closeAccountStatusModal = () => {
             document.getElementById('accountStatusModal').classList.remove('active');
         };
-
-        const getStrikeDocRef = (uid) => doc(db, 'artifacts', appId, 'moderation', 'main', 'user_strikes', uid);
-
-        async function readStrikeData(uid) {
-            if (!uid) return { violationCount: 0, warningDismissedAtCount: 0, escalationLevel: 0 };
-            try {
-                const snap = await getDoc(getStrikeDocRef(uid));
-                if (!snap.exists()) return { violationCount: 0, warningDismissedAtCount: 0, escalationLevel: 0 };
-                const data = snap.data() || {};
-                return {
-                    violationCount: Number(data.violationCount || 0),
-                    warningDismissedAtCount: Number(data.warningDismissedAtCount || 0),
-                    escalationLevel: Number(data.escalationLevel || 0)
-                };
-            } catch (e) {
-                console.error('Failed reading strike data', e);
-                return { violationCount: 0, warningDismissedAtCount: 0, escalationLevel: 0 };
-            }
-        }
-
-        function computeNextStrikeAction(count) {
-            if (count < 2) return 'Warning at 2 strikes';
-            if (count < 5) return '1 hour suspension at 5 strikes';
-            if (count < 10) return '24 hour suspension at 10 strikes';
-            if (count < 20) return 'Ban at 20 strikes';
-            return 'Banned threshold reached';
-        }
-
-        function refreshStrikeSettingsCard(strikeData = currentStrikeData, moderationState = currentAccountStatus) {
-            const countEl = document.getElementById('settings-strike-count');
-            const nextEl = document.getElementById('settings-next-action');
-            const statusEl = document.getElementById('settings-account-status');
-            const pillEl = document.getElementById('settings-account-status-pill');
-            if (!countEl || !nextEl || !statusEl || !pillEl) return;
-
-            const count = Number(strikeData?.violationCount || 0);
-            countEl.innerText = String(count);
-            nextEl.innerText = computeNextStrikeAction(count);
-
-            if (moderationState?.type === 'banned') {
-                pillEl.innerText = 'Banned';
-                pillEl.className = 'text-[10px] px-2 py-1 rounded-full bg-red-500/20 text-red-300';
-                statusEl.innerText = moderationState.message;
-            } else if (moderationState?.type === 'suspended') {
-                pillEl.innerText = 'Suspended';
-                pillEl.className = 'text-[10px] px-2 py-1 rounded-full bg-amber-500/20 text-amber-300';
-                statusEl.innerText = moderationState.message;
-            } else {
-                pillEl.innerText = 'Active';
-                pillEl.className = 'text-[10px] px-2 py-1 rounded-full bg-zinc-800 opacity-80';
-                statusEl.innerText = count >= 2 ? 'Warning active. Further violations can trigger suspension/ban.' : 'No active restrictions.';
-            }
-        }
-
-        function showStrikeWarning(strikeData) {
-            const modal = document.getElementById('strikeWarningModal');
-            const message = document.getElementById('strike-warning-message');
-            if (!modal || !message) return;
-            const count = Number(strikeData?.violationCount || 0);
-            message.innerText = `Your account currently has ${count} violation${count === 1 ? '' : 's'}. At 5 violations you will receive a 1 hour suspension, at 10 violations a 24 hour suspension, and at 20 violations a ban.`;
-            modal.classList.add('active');
-        }
-
-        window.dismissStrikeWarning = async () => {
-            const modal = document.getElementById('strikeWarningModal');
-            if (modal) modal.classList.remove('active');
-            if (!currentUser) return;
-            try {
-                const count = Number(currentStrikeData?.violationCount || 0);
-                await setDoc(getStrikeDocRef(currentUser.uid), {
-                    warningDismissedAtCount: count,
-                    updatedAt: new Date().toISOString()
-                }, { merge: true });
-                currentStrikeData.warningDismissedAtCount = count;
-                refreshStrikeSettingsCard(currentStrikeData, currentAccountStatus);
-            } catch (e) {
-                console.error('Failed to dismiss strike warning', e);
-            }
-        };
-
-        async function applyAutomaticStrikeActions(uid, strikeData) {
-            const count = Number(strikeData?.violationCount || 0);
-            const currentLevel = Number(strikeData?.escalationLevel || 0);
-            const newLevel = count >= 20 ? 20 : count >= 10 ? 10 : count >= 5 ? 5 : 0;
-            if (newLevel <= currentLevel) return strikeData;
-
-            const now = Date.now();
-            const reason = `Automatic moderation action: ${count} total violations.`;
-            try {
-                if (newLevel === 20) {
-                    await setDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'banned_users', uid), {
-                        uid,
-                        reason,
-                        auto: true,
-                        violations: count,
-                        timestamp: now
-                    }, { merge: true });
-                    await deleteDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users', uid)).catch(() => {});
-                    await setUserPublicContentVisibility(uid, true, reason).catch(() => {});
-                } else {
-                    const durationMs = newLevel === 10 ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
-                    await setDoc(doc(db, 'artifacts', appId, 'moderation', 'main', 'suspended_users', uid), {
-                        uid,
-                        reason,
-                        auto: true,
-                        violations: count,
-                        timestamp: now,
-                        until: new Date(now + durationMs).toISOString()
-                    }, { merge: true });
-                }
-
-                const merged = { ...strikeData, escalationLevel: newLevel };
-                await setDoc(getStrikeDocRef(uid), {
-                    escalationLevel: newLevel,
-                    escalatedAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                }, { merge: true });
-                return merged;
-            } catch (e) {
-                console.error('Failed applying automatic strike action', e);
-                return strikeData;
-            }
-        }
-
-        async function registerViolation(uid, source, details = '') {
-            if (!uid) return;
-            try {
-                const current = await readStrikeData(uid);
-                const nextCount = Number(current.violationCount || 0) + 1;
-                let updated = {
-                    ...current,
-                    violationCount: nextCount,
-                    lastViolationAt: new Date().toISOString()
-                };
-
-                await setDoc(getStrikeDocRef(uid), {
-                    violationCount: nextCount,
-                    lastViolationAt: updated.lastViolationAt,
-                    lastViolationSource: source || 'unknown',
-                    lastViolationDetails: (details || '').slice(0, 500),
-                    updatedAt: new Date().toISOString()
-                }, { merge: true });
-
-                updated = await applyAutomaticStrikeActions(uid, updated);
-
-                if (currentUser && uid === currentUser.uid) {
-                    currentStrikeData = updated;
-                    const moderationState = await checkAccountModerationState();
-                    currentAccountStatus = moderationState;
-                    refreshStrikeSettingsCard(currentStrikeData, moderationState);
-
-                    if (moderationState) showAccountStatusModal(moderationState);
-                    else if (nextCount >= 2 && Number(updated.warningDismissedAtCount || 0) < nextCount) showStrikeWarning(updated);
-                }
-            } catch (e) {
-                console.error('Failed to register violation', e);
-            }
-        }
 
         function showAccountStatusModal(status) {
             currentAccountStatus = status;
@@ -1214,9 +1023,7 @@
                 } catch(e) { console.error("Profile fetch error", e); }
 
                 await refreshAdminStatus();
-                currentStrikeData = await readStrikeData(user.uid);
                 const moderationState = await checkAccountModerationState();
-                currentAccountStatus = moderationState;
 
                 // Show App UI (Hidden behind loader initially)
                 document.getElementById('authOverlay').classList.add('hidden-force');
@@ -1234,15 +1041,10 @@
                 
                 handleRouting(); 
 
-                refreshStrikeSettingsCard(currentStrikeData, moderationState);
-
                 if (moderationState) {
                     showAccountStatusModal(moderationState);
                 } else {
                     window.closeAccountStatusModal();
-                    if ((currentStrikeData.violationCount || 0) >= 2 && (currentStrikeData.warningDismissedAtCount || 0) < (currentStrikeData.violationCount || 0)) {
-                        showStrikeWarning(currentStrikeData);
-                    }
                 }
                 
             } else {
@@ -1250,11 +1052,7 @@
                 currentUserProfile = null;
                 currentUserIsAdmin = false;
                 currentAccountStatus = null;
-                currentStrikeData = { violationCount: 0, warningDismissedAtCount: 0, escalationLevel: 0 };
                 window.closeAccountStatusModal();
-                const warningModal = document.getElementById('strikeWarningModal');
-                if (warningModal) warningModal.classList.remove('active');
-                refreshStrikeSettingsCard(currentStrikeData, null);
                 // Show Auth UI (Hidden behind loader initially)
                 document.getElementById('authOverlay').classList.remove('hidden-force');
                 document.getElementById('appHeader').classList.add('hidden-force');
@@ -1593,7 +1391,6 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                 const contentToCheck = `${displayName} ${bio}`;
                 const isSafe = await checkContentSafety(contentToCheck);
                 if (!isSafe) {
-                    await registerViolation(currentUser?.uid, 'profile_create_blocked', contentToCheck);
                     alert("Profile creation blocked: Content detected as potentially unsafe/harmful by AI moderation.");
                     btn.disabled = false;
                     btn.innerHTML = "Create Profile";
@@ -1726,7 +1523,6 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                 const contentToCheck = `${displayName} ${bio}`;
                 const isSafe = await checkContentSafety(contentToCheck);
                 if (!isSafe) {
-                    await registerViolation(currentUser?.uid, 'profile_update_blocked', contentToCheck);
                     alert("Update blocked: Content detected as potentially unsafe/harmful.");
                     btn.disabled = false;
                     btn.innerText = "Save Changes";
@@ -1898,33 +1694,22 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                 const decision = response.text().trim().toUpperCase();
                 
                 if (decision.includes("VIOLATIVE")) {
-                    let violatorUid = null;
-
                     // Update Firestore to Flag content
                     if (activeReport.type === 'note') {
-                         const noteRef = doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', activeReport.id);
-                         await updateDoc(noteRef, {
+                         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', activeReport.id), {
                              flagged: true,
                              flaggedReason: reason || "Community Violation"
                          });
-                         const noteSnap = await getDoc(noteRef);
-                         violatorUid = noteSnap.exists() ? (noteSnap.data()?.userId || null) : null;
                     } else if (activeReport.type === 'profile') {
                          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', activeReport.id), {
                              flagged: true
                          });
-                         violatorUid = activeReport.id;
                     } else if (activeReport.type === 'comment') {
-                         const commentRef = doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', activeReport.noteId, 'comments', activeReport.id);
-                         await updateDoc(commentRef, {
+                         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', activeReport.noteId, 'comments', activeReport.id), {
                              flagged: true,
                              flaggedReason: reason || "Community Violation"
                          });
-                         const commentSnap = await getDoc(commentRef);
-                         violatorUid = commentSnap.exists() ? (commentSnap.data()?.authorId || null) : null;
                     }
-
-                    await registerViolation(violatorUid, `reported_${activeReport.type}`, reason || activeReport.content || 'Reported violative content');
                     alert("Report accepted. Content has been flagged and hidden.");
                     // Reload current view
                     handleRouting();
@@ -2100,7 +1885,6 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
             // AI Moderation for Comments
             const isSafe = await checkContentSafety(text);
             if (!isSafe) {
-                await registerViolation(currentUser?.uid, 'comment_blocked', text);
                 alert("Comment blocked: Content detected as unsafe/harmful.");
                 return;
             }
@@ -2291,7 +2075,6 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                 if (note.shared) {
                      const isSafe = await checkContentSafety(val);
                      if (!isSafe) {
-                         await registerViolation(currentUser?.uid, 'shared_note_update_blocked', val);
                          alert("Cannot update shared note: Content detected as unsafe. Unshare the note to save this version privately.");
                          btn.disabled = false;
                          btn.innerText = "Save";
@@ -2395,7 +2178,6 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                 // AI Moderation for Notes
                 const isSafe = await checkContentSafety(note.text);
                 if (!isSafe) {
-                    await registerViolation(currentUser?.uid, 'share_note_blocked', note.text);
                     alert("Cannot share note: Content violates safety guidelines.");
                     btn.innerHTML = originalContent;
                     return;
