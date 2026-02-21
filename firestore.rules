@@ -1,0 +1,316 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -----------------------------------------------------------------
+    // Helper Functions
+    // -----------------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin(appId) {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/artifacts/$(appId)/moderation/main/admins/$(request.auth.uid));
+    }
+
+    function isBanned(appId) {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/artifacts/$(appId)/moderation/main/banned_users/$(request.auth.uid));
+    }
+
+    function isSuspended(appId) {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/artifacts/$(appId)/moderation/main/suspended_users/$(request.auth.uid))
+             && get(/databases/$(database)/documents/artifacts/$(appId)/moderation/main/suspended_users/$(request.auth.uid)).data.until > request.time;
+    }
+
+
+    function maxEscalationForCount(count) {
+      return count >= 20 ? 20
+             : count >= 10 ? 10
+             : count >= 5 ? 5
+             : 0;
+    }
+
+    function isValidSelfStrikeWrite(appId, userId) {
+      let prevCount = (resource == null || !(resource.data.violationCount is int)) ? 0 : resource.data.violationCount;
+      let prevDismissed = (resource == null || !(resource.data.warningDismissedAtCount is int)) ? 0 : resource.data.warningDismissedAtCount;
+      let prevEsc = (resource == null || !(resource.data.escalationLevel is int)) ? 0 : resource.data.escalationLevel;
+      let nextCount = ('violationCount' in request.resource.data) ? request.resource.data.violationCount : prevCount;
+      let nextDismissed = ('warningDismissedAtCount' in request.resource.data) ? request.resource.data.warningDismissedAtCount : prevDismissed;
+      let nextEsc = ('escalationLevel' in request.resource.data) ? request.resource.data.escalationLevel : prevEsc;
+
+      return isSignedIn()
+             && request.auth.uid == userId
+             && !isBanned(appId)
+             && (
+               (resource == null && request.resource.data.keys().hasOnly([
+                 'violationCount',
+                 'warningDismissedAtCount',
+                 'escalationLevel',
+                 'lastViolationAt',
+                 'lastViolationSource',
+                 'lastViolationDetails',
+                 'updatedAt',
+                 'escalatedAt'
+               ]))
+               ||
+               (resource != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                 'violationCount',
+                 'warningDismissedAtCount',
+                 'escalationLevel',
+                 'lastViolationAt',
+                 'lastViolationSource',
+                 'lastViolationDetails',
+                 'updatedAt',
+                 'escalatedAt'
+               ]))
+             )
+             && (nextCount is int)
+             && (nextDismissed is int)
+             && (nextEsc is int)
+             && nextCount >= prevCount
+             && nextCount <= prevCount + 1
+             && nextDismissed >= prevDismissed
+             && nextDismissed <= nextCount
+             && [0, 5, 10, 20].hasAll([nextEsc])
+             && nextEsc >= prevEsc
+             && nextEsc <= maxEscalationForCount(nextCount)
+             && (!('lastViolationSource' in request.resource.data) || request.resource.data.lastViolationSource is string)
+             && (!('lastViolationDetails' in request.resource.data) || request.resource.data.lastViolationDetails is string)
+             && (!('lastViolationAt' in request.resource.data) || request.resource.data.lastViolationAt is string)
+             && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is string)
+             && (!('escalatedAt' in request.resource.data) || request.resource.data.escalatedAt is string);
+    }
+
+
+    function isValidCommunityReportStrikeWrite(appId, userId) {
+      let prevCount = (resource == null || !(resource.data.violationCount is int)) ? 0 : resource.data.violationCount;
+      let prevDismissed = (resource == null || !(resource.data.warningDismissedAtCount is int)) ? 0 : resource.data.warningDismissedAtCount;
+      let prevEsc = (resource == null || !(resource.data.escalationLevel is int)) ? 0 : resource.data.escalationLevel;
+      let nextCount = ('violationCount' in request.resource.data) ? request.resource.data.violationCount : prevCount;
+      let nextDismissed = ('warningDismissedAtCount' in request.resource.data) ? request.resource.data.warningDismissedAtCount : prevDismissed;
+      let nextEsc = ('escalationLevel' in request.resource.data) ? request.resource.data.escalationLevel : prevEsc;
+      let source = ('lastViolationSource' in request.resource.data) ? request.resource.data.lastViolationSource : '';
+
+      return isSignedIn()
+             && request.auth.uid != userId
+             && !isBanned(appId)
+             && (
+               (resource == null && request.resource.data.keys().hasOnly([
+                 'violationCount',
+                 'warningDismissedAtCount',
+                 'escalationLevel',
+                 'lastViolationAt',
+                 'lastViolationSource',
+                 'lastViolationDetails',
+                 'updatedAt',
+                 'escalatedAt'
+               ]))
+               ||
+               (resource != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                 'violationCount',
+                 'warningDismissedAtCount',
+                 'escalationLevel',
+                 'lastViolationAt',
+                 'lastViolationSource',
+                 'lastViolationDetails',
+                 'updatedAt',
+                 'escalatedAt'
+               ]))
+             )
+             && (nextCount is int)
+             && (nextDismissed is int)
+             && (nextEsc is int)
+             && nextCount == prevCount + 1
+             && nextDismissed == prevDismissed
+             && nextEsc == prevEsc
+             && source is string
+             && source.matches('^reported_(note|profile|comment)$')
+             && (!('lastViolationDetails' in request.resource.data) || request.resource.data.lastViolationDetails is string)
+             && (!('lastViolationAt' in request.resource.data) || request.resource.data.lastViolationAt is string)
+             && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is string)
+             && (!('escalatedAt' in request.resource.data) || request.resource.data.escalatedAt == (resource == null ? null : resource.data.escalatedAt));
+    }
+
+    // Check if request.auth.uid owns a resource with authorId or uid.
+    function isOwner(resourceData) {
+      return isSignedIn() && (resourceData.authorId == request.auth.uid || resourceData.uid == request.auth.uid);
+    }
+
+    // Ensure authorId remains owned by the updater.
+    function preservesOwnership() {
+      return request.resource.data.authorId == request.auth.uid;
+    }
+
+    // Non-owner community reporting action for flagged content only.
+    function isFlaggingAction() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['flagged', 'flaggedReason'])
+             && request.resource.data.flagged == true;
+    }
+
+    // -----------------------------------------------------------------
+    // 1. Moderation Data (Admins, Bans, Suspensions)
+    // -----------------------------------------------------------------
+    // Users can read their own ban/suspension status so the app can show account state popups.
+    match /artifacts/{appId}/moderation/main/banned_users/{userId} {
+      allow read: if isAdmin(appId) || (isSignedIn() && request.auth.uid == userId);
+      allow write: if isAdmin(appId);
+    }
+
+    match /artifacts/{appId}/moderation/main/suspended_users/{userId} {
+      allow read: if isAdmin(appId) || (isSignedIn() && request.auth.uid == userId);
+      allow write: if isAdmin(appId);
+    }
+
+
+    // User strikes: user can read/write their own strike doc (with strict monotonic constraints).
+    // Admin retains full control for moderation operations.
+    match /artifacts/{appId}/moderation/main/user_strikes/{userId} {
+      allow read: if isAdmin(appId) || (isSignedIn() && request.auth.uid == userId);
+      allow create, update: if isAdmin(appId)
+                            || isValidSelfStrikeWrite(appId, userId)
+                            || isValidCommunityReportStrikeWrite(appId, userId);
+      allow delete: if isAdmin(appId);
+    }
+
+    match /artifacts/{appId}/moderation/main/{collection}/{docId} {
+      allow read, write: if isAdmin(appId);
+    }
+
+    // -----------------------------------------------------------------
+    // 2. Private User Data (Notes, Todos)
+    // -----------------------------------------------------------------
+    match /artifacts/{appId}/users/{userId}/{collectionName}/{document=**} {
+      allow read: if isSignedIn()
+                  && request.auth.uid == userId
+                  && !isBanned(appId);
+
+      allow write: if isSignedIn()
+                   && request.auth.uid == userId
+                   && !isBanned(appId)
+                   && !isSuspended(appId);
+    }
+
+    // -----------------------------------------------------------------
+    // 3. Public Data
+    // -----------------------------------------------------------------
+
+    // --- A. Profiles ---
+    match /artifacts/{appId}/public/data/profiles/{userId} {
+      allow read: if isSignedIn() && !isBanned(appId);
+
+      allow create: if isSignedIn()
+                   && request.auth.uid == userId
+                   && !isBanned(appId)
+                   && !isSuspended(appId);
+
+      allow update: if isAdmin(appId)
+                   || (
+                     isSignedIn()
+                     && !isBanned(appId)
+                     && !isSuspended(appId)
+                     && (
+                        request.auth.uid == userId
+                        || isFlaggingAction()
+                     )
+                   );
+
+      // Owner can delete own profile. Admin can remove profiles for moderation.
+      allow delete: if isAdmin(appId)
+                   || (
+                     isSignedIn()
+                     && !isBanned(appId)
+                     && request.auth.uid == userId
+                   );
+    }
+
+    // --- B. Usernames ---
+    match /artifacts/{appId}/public/data/usernames/{username} {
+      allow read: if isSignedIn() && !isBanned(appId);
+
+      allow create: if isSignedIn()
+                    && !isBanned(appId)
+                    && !isSuspended(appId)
+                    && request.resource.data.uid == request.auth.uid;
+
+      allow update: if false;
+
+      // Owner can delete own username mapping. Admin can remove reserved mappings.
+      allow delete: if isAdmin(appId)
+                    || (
+                      isSignedIn()
+                      && !isBanned(appId)
+                      && resource.data.uid == request.auth.uid
+                    );
+    }
+
+    // --- C. Shared Notes ---
+    match /artifacts/{appId}/public/data/shared_notes/{noteId} {
+
+      allow read: if isSignedIn() && !isBanned(appId);
+
+      allow create: if isSignedIn()
+                    && !isBanned(appId)
+                    && !isSuspended(appId)
+                    && request.resource.data.authorId == request.auth.uid;
+
+      allow update: if isAdmin(appId)
+                    || (
+                      isSignedIn()
+                      && !isBanned(appId)
+                      && !isSuspended(appId)
+                      && (
+                        (isOwner(resource.data) && preservesOwnership())
+                        || isFlaggingAction()
+                      )
+                    );
+
+      // Owner or admin can unshare/delete.
+      allow delete: if isAdmin(appId)
+                    || (
+                      isSignedIn()
+                      && !isBanned(appId)
+                      && !isSuspended(appId)
+                      && isOwner(resource.data)
+                    );
+
+      // Comments Sub-collection
+      match /comments/{commentId} {
+
+        allow read: if isSignedIn() && !isBanned(appId);
+
+        allow create: if isSignedIn()
+                      && !isBanned(appId)
+                      && !isSuspended(appId)
+                      && request.resource.data.authorId == request.auth.uid;
+
+        // Owner can edit own comment; community can report; admin can update/moderate.
+        allow update: if isAdmin(appId)
+                      || (
+                        isSignedIn()
+                        && !isBanned(appId)
+                        && !isSuspended(appId)
+                        && (
+                          (isOwner(resource.data) && preservesOwnership())
+                          || isFlaggingAction()
+                        )
+                      );
+
+        // Comment author, note owner, or admin can delete.
+        allow delete: if isAdmin(appId)
+                      || (
+                        isSignedIn()
+                        && !isBanned(appId)
+                        && !isSuspended(appId)
+                        && (
+                          isOwner(resource.data)
+                          || get(/databases/$(database)/documents/artifacts/$(appId)/public/data/shared_notes/$(noteId)).data.authorId == request.auth.uid
+                        )
+                      );
+      }
+    }
+  }
+}
