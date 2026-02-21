@@ -302,25 +302,31 @@
             position: absolute;
             right: 0;
             top: calc(100% + 8px);
-            min-width: 200px;
+            min-width: 220px;
             background: var(--md-sys-color-secondary-container);
             border: 1px solid var(--md-sys-color-surface-variant);
-            border-radius: 14px;
-            padding: 6px;
+            border-radius: 16px;
+            padding: 8px;
             display: none;
-            box-shadow: 0 10px 24px rgba(0,0,0,0.28);
+            box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
             z-index: 20;
         }
         .note-actions-dropdown.active { display: block; }
         .note-actions-dropdown button {
             width: 100%;
             text-align: left;
-            padding: 10px 12px;
-            border-radius: 10px;
-            font-size: 0.85rem;
+            padding: 11px 12px;
+            border-radius: 12px;
+            font-size: 0.88rem;
+            font-weight: 500;
             color: var(--md-sys-color-on-secondary-container);
+            letter-spacing: 0.01em;
+            transition: background 0.18s ease, transform 0.12s ease;
         }
-        .note-actions-dropdown button:hover { background: rgba(255,255,255,0.06); }
+        .note-actions-dropdown button:hover { background: rgba(168, 199, 250, 0.16); }
+        .note-actions-dropdown button:active { transform: scale(0.99); }
 
         /* Defensive: hide any legacy in-card profile menu remnants */
         .profile-menu,
@@ -553,7 +559,7 @@
                     <button id="share-note-btn" class="bg-zinc-800 text-blue-400 w-10 h-10 rounded-full flex items-center justify-center ripple hidden-force">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/></svg>
                     </button>
-                    <button id="edit-note-btn" class="bg-blue-400/10 text-blue-400 px-4 py-1 rounded-full text-sm font-medium ripple hidden-force">Edit Note</button>
+                    <button id="edit-note-btn" class="bg-blue-400/10 text-blue-400 px-4 py-2 min-h-10 rounded-full text-sm font-medium leading-none flex items-center justify-center ripple hidden-force">Edit Note</button>
                 </div>
             </div>
             
