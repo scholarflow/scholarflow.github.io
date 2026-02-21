@@ -45,16 +45,29 @@ service cloud.firestore {
       return isSignedIn()
              && request.auth.uid == userId
              && !isBanned(appId)
-             && request.resource.data.keys().hasOnly([
-               'violationCount',
-               'warningDismissedAtCount',
-               'escalationLevel',
-               'lastViolationAt',
-               'lastViolationSource',
-               'lastViolationDetails',
-               'updatedAt',
-               'escalatedAt'
-             ])
+             && (
+               (resource == null && request.resource.data.keys().hasOnly([
+                 'violationCount',
+                 'warningDismissedAtCount',
+                 'escalationLevel',
+                 'lastViolationAt',
+                 'lastViolationSource',
+                 'lastViolationDetails',
+                 'updatedAt',
+                 'escalatedAt'
+               ]))
+               ||
+               (resource != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                 'violationCount',
+                 'warningDismissedAtCount',
+                 'escalationLevel',
+                 'lastViolationAt',
+                 'lastViolationSource',
+                 'lastViolationDetails',
+                 'updatedAt',
+                 'escalatedAt'
+               ]))
+             )
              && (nextCount is int)
              && (nextDismissed is int)
              && (nextEsc is int)
@@ -85,16 +98,29 @@ service cloud.firestore {
       return isSignedIn()
              && request.auth.uid != userId
              && !isBanned(appId)
-             && request.resource.data.keys().hasOnly([
-               'violationCount',
-               'warningDismissedAtCount',
-               'escalationLevel',
-               'lastViolationAt',
-               'lastViolationSource',
-               'lastViolationDetails',
-               'updatedAt',
-               'escalatedAt'
-             ])
+             && (
+               (resource == null && request.resource.data.keys().hasOnly([
+                 'violationCount',
+                 'warningDismissedAtCount',
+                 'escalationLevel',
+                 'lastViolationAt',
+                 'lastViolationSource',
+                 'lastViolationDetails',
+                 'updatedAt',
+                 'escalatedAt'
+               ]))
+               ||
+               (resource != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                 'violationCount',
+                 'warningDismissedAtCount',
+                 'escalationLevel',
+                 'lastViolationAt',
+                 'lastViolationSource',
+                 'lastViolationDetails',
+                 'updatedAt',
+                 'escalatedAt'
+               ]))
+             )
              && (nextCount is int)
              && (nextDismissed is int)
              && (nextEsc is int)
