@@ -855,35 +855,83 @@
     </nav>
 
     <script>
-        // Global fallback in case module imports fail before app bootstrap runs
-        window.__scholarflowBootResolved = false;
-        window.__scholarflowModuleStarted = false;
+        // Global bootstrap watchdog: must work even if module imports fail early.
+        (function () {
+            var FALLBACK_TIMEOUT_MS = 12000;
+            var startedAt = Date.now();
 
-        window.__forceBootFallback = (statusMessage = 'Initialization timeout. Please sign in again.') => {
-            if (window.__scholarflowBootResolved) return;
-            const loader = document.getElementById('boot-loader');
-            if (loader) loader.classList.add('loaded');
+            window.__scholarflowBootResolved = false;
+            window.__scholarflowModuleStarted = false;
 
-            const status = document.getElementById('boot-status');
-            if (status) status.innerText = statusMessage;
+            window.__markBootResolved = function () {
+                window.__scholarflowBootResolved = true;
+            };
 
-            document.getElementById('authOverlay')?.classList.remove('hidden-force');
-            document.getElementById('appHeader')?.classList.add('hidden-force');
-            document.getElementById('main-content')?.classList.add('hidden-force');
-            document.getElementById('appNav')?.classList.add('hidden-force');
+            window.__forceBootFallback = function (statusMessage) {
+                if (window.__scholarflowBootResolved) return;
 
-            window.__scholarflowBootResolved = true;
-        };
+                try {
+                    var loader = document.getElementById('boot-loader');
+                    if (loader) {
+                        loader.classList.add('loaded');
+                        loader.style.opacity = '0';
+                        loader.style.visibility = 'hidden';
+                        loader.style.pointerEvents = 'none';
+                        setTimeout(function () { loader.style.display = 'none'; }, 600);
+                    }
 
-        setTimeout(() => {
-            if (window.__scholarflowBootResolved) return;
-            if (!window.__scholarflowModuleStarted) {
-                console.error('Firebase module did not initialize; using global boot fallback.');
-            } else {
-                console.warn('Bootstrap timeout fallback triggered.');
-            }
-            window.__forceBootFallback('Initialization timeout. Please sign in again.');
-        }, 10000);
+                    var status = document.getElementById('boot-status');
+                    if (status) status.innerText = statusMessage || 'Initialization timeout. Please sign in again.';
+
+                    var authOverlay = document.getElementById('authOverlay');
+                    var appHeader = document.getElementById('appHeader');
+                    var mainContent = document.getElementById('main-content');
+                    var appNav = document.getElementById('appNav');
+
+                    if (authOverlay) authOverlay.classList.remove('hidden-force');
+                    if (appHeader) appHeader.classList.add('hidden-force');
+                    if (mainContent) mainContent.classList.add('hidden-force');
+                    if (appNav) appNav.classList.add('hidden-force');
+                } catch (e) {
+                    console.error('Boot fallback failed', e);
+                }
+
+                window.__markBootResolved();
+            };
+
+            var watchdogId = setInterval(function () {
+                if (window.__scholarflowBootResolved) {
+                    clearInterval(watchdogId);
+                    return;
+                }
+
+                if (Date.now() - startedAt >= FALLBACK_TIMEOUT_MS) {
+                    if (!window.__scholarflowModuleStarted) {
+                        console.error('Firebase module did not initialize; forcing boot fallback.');
+                    } else {
+                        console.warn('Auth startup timed out; forcing boot fallback.');
+                    }
+                    window.__forceBootFallback('Initialization timeout. Please sign in again.');
+                    clearInterval(watchdogId);
+                }
+            }, 250);
+
+            window.addEventListener('error', function () {
+                if (!window.__scholarflowBootResolved) {
+                    setTimeout(function () {
+                        window.__forceBootFallback('Initialization error. Please sign in again.');
+                    }, 0);
+                }
+            });
+
+            window.addEventListener('unhandledrejection', function () {
+                if (!window.__scholarflowBootResolved) {
+                    setTimeout(function () {
+                        window.__forceBootFallback('Initialization error. Please sign in again.');
+                    }, 0);
+                }
+            });
+        })();
     </script>
 
 
@@ -1240,7 +1288,7 @@
                 const loader = document.getElementById('boot-loader');
                 if (loader) loader.classList.add('loaded');
                 isAuthResolved = true;
-                window.__scholarflowBootResolved = true;
+                window.__markBootResolved();
             }
         });
 
@@ -1256,7 +1304,7 @@
             document.getElementById('main-content').classList.add('hidden-force');
             document.getElementById('appNav').classList.add('hidden-force');
             isAuthResolved = true;
-            window.__scholarflowBootResolved = true;
+            window.__markBootResolved();
         }, 7000);
 
         // --- Sync Logic ---
