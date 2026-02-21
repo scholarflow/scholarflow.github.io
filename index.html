@@ -2197,8 +2197,31 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
         window.deleteNote = async (id) => {
             const note = notes.find(n => n.id === id);
             if (!note) return;
-            if (note.shared) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', id));
-            await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', id));
+
+            try {
+                const attachments = note.attachments || [];
+                const deletionResults = await Promise.allSettled(
+                    attachments
+                        .map(att => {
+                            if (att.storagePath) return ref(storage, att.storagePath);
+                            if (att.url) return ref(storage, att.url);
+                            return null;
+                        })
+                        .filter(Boolean)
+                        .map(fileRef => deleteObject(fileRef))
+                );
+
+                const failedDeletions = deletionResults.filter(r => r.status === 'rejected');
+                if (failedDeletions.length > 0) {
+                    throw new Error(`${failedDeletions.length} attachment file(s) failed to delete from storage.`);
+                }
+
+                if (note.shared) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', id));
+                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', id));
+            } catch (e) {
+                console.error(e);
+                alert("Delete failed");
+            }
         };
 
         // --- Sharing Logic with Profile Link Support ---
