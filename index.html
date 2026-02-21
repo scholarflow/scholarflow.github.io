@@ -554,6 +554,8 @@
                             <button onclick="reportCurrentViewedNote()">Report</button>
                             <button onclick="copyCurrentViewedNoteId()">Copy Note ID</button>
                             <button onclick="copyCurrentViewedNoteLink()">Copy Link</button>
+                            <button onclick="copyCurrentViewedNoteContent()">Copy Note Content</button>
+                            <button onclick="showCurrentViewedNoteDetails()">Note Details</button>
                         </div>
                     </div>
                     <button id="share-note-btn" class="bg-zinc-800 text-blue-400 w-10 h-10 rounded-full flex items-center justify-center ripple hidden-force">
@@ -894,7 +896,7 @@
         let currentUserIsAdmin = false;
         let adminSharedNotes = [];
         let currentAccountStatus = null; // null | { type: 'suspended' | 'banned', message: string }
-        let currentViewedNoteMenuData = null; // { id, text, isOwner, isPublic }
+        let currentViewedNoteMenuData = null; // { id, text, isOwner, isPublic, date, authorName, authorUsername, commentsLocked, commentsDisabled }
 
         // Update Loader Message Helper
         const setBootStatus = (msg) => {
@@ -2736,6 +2738,28 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
             closeNoteActionsMenu();
         };
 
+        window.copyCurrentViewedNoteContent = async () => {
+            if (!currentViewedNoteMenuData?.text) return;
+            await navigator.clipboard.writeText(currentViewedNoteMenuData.text);
+            alert('Note content copied!');
+            closeNoteActionsMenu();
+        };
+
+        window.showCurrentViewedNoteDetails = () => {
+            if (!currentViewedNoteMenuData?.id) return;
+            const details = [
+                `Note ID: ${currentViewedNoteMenuData.id}`,
+                `Author: ${currentViewedNoteMenuData.authorUsername ? '@' + currentViewedNoteMenuData.authorUsername : (currentViewedNoteMenuData.authorName || 'Unknown')}`,
+                `Date: ${currentViewedNoteMenuData.date || 'Unknown'}`,
+                `Visibility: ${currentViewedNoteMenuData.isPublic ? 'Public' : 'Private'}`,
+                `Comments Locked: ${currentViewedNoteMenuData.commentsLocked ? 'Yes' : 'No'}`,
+                `Comments Disabled: ${currentViewedNoteMenuData.commentsDisabled ? 'Yes' : 'No'}`,
+                `Content Length: ${(currentViewedNoteMenuData.text || '').length} characters`
+            ];
+            alert(details.join('\n'));
+            closeNoteActionsMenu();
+        };
+
         // --- Note Detail Renderers ---
         async function renderNoteDetail(id) {
             const note = notes.find(n => n.id === id);
@@ -2758,7 +2782,7 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
             document.getElementById('note-detail-date').innerText = `Last updated: ${note.date}`;
             document.getElementById('note-detail-author').classList.add('hidden-force');
             document.getElementById('comments-section').classList.add('hidden-force');
-            currentViewedNoteMenuData = { id: note.id, text: note.text || '', isOwner: true, isPublic: false };
+            currentViewedNoteMenuData = { id: note.id, text: note.text || '', isOwner: true, isPublic: false, date: note.date || '', authorName: currentUserProfile?.displayName || currentUser?.displayName || '', authorUsername: currentUserProfile?.username || '', commentsLocked: false, commentsDisabled: false };
             closeNoteActionsMenu();
             document.getElementById('note-actions-btn').classList.add('hidden-force');
             
@@ -2826,7 +2850,7 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
 
             // Setup Note Actions Menu
             const isOwner = currentUser && note.authorId === currentUser.uid;
-            currentViewedNoteMenuData = { id: note.id, text: note.text || '', isOwner: !!isOwner, isPublic: true };
+            currentViewedNoteMenuData = { id: note.id, text: note.text || '', isOwner: !!isOwner, isPublic: true, date: note.date || '', authorName: note.author || '', authorUsername: note.authorUsername || '', commentsLocked: !!note.commentsLocked, commentsDisabled: !!note.commentsDisabled };
             closeNoteActionsMenu();
             const noteActionsBtn = document.getElementById('note-actions-btn');
             if (noteActionsBtn) noteActionsBtn.classList.remove('hidden-force');
