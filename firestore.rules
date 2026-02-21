@@ -88,51 +88,28 @@ service cloud.firestore {
 
     function isValidCommunityReportStrikeWrite(appId, userId) {
       let prevCount = (resource == null || !(resource.data.violationCount is int)) ? 0 : resource.data.violationCount;
-      let prevDismissed = (resource == null || !(resource.data.warningDismissedAtCount is int)) ? 0 : resource.data.warningDismissedAtCount;
-      let prevEsc = (resource == null || !(resource.data.escalationLevel is int)) ? 0 : resource.data.escalationLevel;
-      let nextCount = ('violationCount' in request.resource.data) ? request.resource.data.violationCount : prevCount;
-      let nextDismissed = ('warningDismissedAtCount' in request.resource.data) ? request.resource.data.warningDismissedAtCount : prevDismissed;
-      let nextEsc = ('escalationLevel' in request.resource.data) ? request.resource.data.escalationLevel : prevEsc;
+      let changedKeys = resource == null
+                        ? request.resource.data.keys()
+                        : request.resource.data.diff(resource.data).affectedKeys();
       let source = ('lastViolationSource' in request.resource.data) ? request.resource.data.lastViolationSource : '';
 
       return isSignedIn()
              && request.auth.uid != userId
              && !isBanned(appId)
-             && (
-               (resource == null && request.resource.data.keys().hasOnly([
-                 'violationCount',
-                 'warningDismissedAtCount',
-                 'escalationLevel',
-                 'lastViolationAt',
-                 'lastViolationSource',
-                 'lastViolationDetails',
-                 'updatedAt',
-                 'escalatedAt'
-               ]))
-               ||
-               (resource != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                 'violationCount',
-                 'warningDismissedAtCount',
-                 'escalationLevel',
-                 'lastViolationAt',
-                 'lastViolationSource',
-                 'lastViolationDetails',
-                 'updatedAt',
-                 'escalatedAt'
-               ]))
-             )
-             && (nextCount is int)
-             && (nextDismissed is int)
-             && (nextEsc is int)
-             && nextCount == prevCount + 1
-             && nextDismissed == prevDismissed
-             && nextEsc == prevEsc
+             && changedKeys.hasOnly([
+               'violationCount',
+               'lastViolationAt',
+               'lastViolationSource',
+               'lastViolationDetails',
+               'updatedAt'
+             ])
+             && (request.resource.data.violationCount is int)
+             && request.resource.data.violationCount == prevCount + 1
              && source is string
              && source.matches('^reported_(note|profile|comment)$')
              && (!('lastViolationDetails' in request.resource.data) || request.resource.data.lastViolationDetails is string)
              && (!('lastViolationAt' in request.resource.data) || request.resource.data.lastViolationAt is string)
-             && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is string)
-             && (!('escalatedAt' in request.resource.data) || request.resource.data.escalatedAt == (resource == null ? null : resource.data.escalatedAt));
+             && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is string);
     }
 
     // Check if request.auth.uid owns a resource with authorId or uid.
