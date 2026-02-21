@@ -1465,6 +1465,14 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
 
                     const profileData = profileDoc.data();
 
+                    currentViewedProfileMenuData = {
+                        uid: targetUid,
+                        username: profileData.username,
+                        displayName: profileData.displayName,
+                        bio: profileData.bio || ''
+                    };
+                    actionsBtn.classList.remove('hidden-force');
+
                     // Privacy Check
                     if (profileData.hidden && targetUid !== currentUser?.uid) {
                         container.innerHTML = `
@@ -1519,6 +1527,15 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                     // Render Public View
                     container.innerHTML = `
                          <div class="material-card relative overflow-hidden">
+                            <div class="profile-menu">
+                                <button onclick="toggleProfileMenu()" class="w-9 h-9 rounded-full bg-black/30 hover:bg-black/50 transition-colors">⋮</button>
+                                <div id="profile-menu-dropdown" class="profile-menu-dropdown">
+                                    <button onclick="reportProfileFromMenu('${targetUid}', ${JSON.stringify(profileData.displayName || '')}, ${JSON.stringify(profileData.bio || '')})">Report</button>
+                                    <button onclick="copyProfileUsername('${profileData.username}')">Copy Username</button>
+                                    <button onclick="copyProfileUid('${targetUid}')">Copy User ID</button>
+                                    <button onclick="copyProfileLink('${profileData.username}')">Copy Link</button>
+                                </div>
+                            </div>
                             <div class="profile-header-bg"></div>
                             <div class="profile-avatar-xl">
                                 ${profileData.photoURL ? `<img src="${profileData.photoURL}" alt="avatar">` : (profileData.displayName || '?')[0]}
