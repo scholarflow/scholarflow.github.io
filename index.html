@@ -852,6 +852,39 @@
         </a>
     </nav>
 
+    <script>
+        // Global fallback in case module imports fail before app bootstrap runs
+        window.__scholarflowBootResolved = false;
+        window.__scholarflowModuleStarted = false;
+
+        window.__forceBootFallback = (statusMessage = 'Initialization timeout. Please sign in again.') => {
+            if (window.__scholarflowBootResolved) return;
+            const loader = document.getElementById('boot-loader');
+            if (loader) loader.classList.add('loaded');
+
+            const status = document.getElementById('boot-status');
+            if (status) status.innerText = statusMessage;
+
+            document.getElementById('authOverlay')?.classList.remove('hidden-force');
+            document.getElementById('appHeader')?.classList.add('hidden-force');
+            document.getElementById('main-content')?.classList.add('hidden-force');
+            document.getElementById('appNav')?.classList.add('hidden-force');
+
+            window.__scholarflowBootResolved = true;
+        };
+
+        setTimeout(() => {
+            if (window.__scholarflowBootResolved) return;
+            if (!window.__scholarflowModuleStarted) {
+                console.error('Firebase module did not initialize; using global boot fallback.');
+            } else {
+                console.warn('Bootstrap timeout fallback triggered.');
+            }
+            window.__forceBootFallback('Initialization timeout. Please sign in again.');
+        }, 10000);
+    </script>
+
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -879,6 +912,8 @@
         // Initialize Vertex AI
         const vertexAI = getVertexAI(app);
         const model = getGenerativeModel(vertexAI, { model: "gemini-2.5-flash" });
+
+        window.__scholarflowModuleStarted = true;
 
         let currentUser = null;
         let currentUserProfile = null; // Store fetched profile data
@@ -1203,6 +1238,7 @@
                 const loader = document.getElementById('boot-loader');
                 if (loader) loader.classList.add('loaded');
                 isAuthResolved = true;
+                window.__scholarflowBootResolved = true;
             }
         });
 
@@ -1218,6 +1254,7 @@
             document.getElementById('main-content').classList.add('hidden-force');
             document.getElementById('appNav').classList.add('hidden-force');
             isAuthResolved = true;
+            window.__scholarflowBootResolved = true;
         }, 7000);
 
         // --- Sync Logic ---
