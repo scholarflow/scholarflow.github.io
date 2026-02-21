@@ -830,6 +830,10 @@
             <div class="pill">📝</div>
             <span class="text-[11px] font-medium">Notes</span>
         </a>
+        <a href="#focus" class="nav-item flex flex-col items-center gap-1 shrink-0 min-w-[64px]">
+            <div class="pill">🎯</div>
+            <span class="text-[11px] font-medium">Focus</span>
+        </a>
         <a href="#profile" class="nav-item flex flex-col items-center gap-1 shrink-0 min-w-[64px]">
             <div class="pill">👤</div>
             <span class="text-[11px] font-medium">Profile</span>
@@ -1130,7 +1134,8 @@
         onAuthStateChanged(auth, async (user) => {
             setBootStatus("Checking credentials...");
             
-            if (user) {
+            try {
+                if (user) {
                 currentUser = user;
                 
                 // Fetch Profile Logic
@@ -1171,27 +1176,49 @@
                     window.closeAccountStatusModal();
                 }
                 
-            } else {
-                currentUser = null;
-                currentUserProfile = null;
-                currentUserIsAdmin = false;
-                currentAccountStatus = null;
-                blockedUsers = {};
-                usersBlockingMe = {};
-                renderBlockedUsersList();
-                window.closeAccountStatusModal();
-                // Show Auth UI (Hidden behind loader initially)
+                } else {
+                    currentUser = null;
+                    currentUserProfile = null;
+                    currentUserIsAdmin = false;
+                    currentAccountStatus = null;
+                    blockedUsers = {};
+                    usersBlockingMe = {};
+                    renderBlockedUsersList();
+                    window.closeAccountStatusModal();
+                    // Show Auth UI (Hidden behind loader initially)
+                    document.getElementById('authOverlay').classList.remove('hidden-force');
+                    document.getElementById('appHeader').classList.add('hidden-force');
+                    document.getElementById('main-content').classList.add('hidden-force');
+                    document.getElementById('appNav').classList.add('hidden-force');
+                }
+            } catch (e) {
+                console.error('Auth initialization failed', e);
+                setBootStatus('Initialization failed. Please refresh.');
                 document.getElementById('authOverlay').classList.remove('hidden-force');
                 document.getElementById('appHeader').classList.add('hidden-force');
                 document.getElementById('main-content').classList.add('hidden-force');
                 document.getElementById('appNav').classList.add('hidden-force');
+            } finally {
+                // Reveal UI
+                const loader = document.getElementById('boot-loader');
+                if (loader) loader.classList.add('loaded');
+                isAuthResolved = true;
             }
-
-            // Reveal UI
-            const loader = document.getElementById('boot-loader');
-            loader.classList.add('loaded');
-            isAuthResolved = true;
         });
+
+        // Fallback: prevent indefinite boot-loader lock if auth init hangs unexpectedly
+        setTimeout(() => {
+            if (isAuthResolved) return;
+            console.warn('Auth initialization timeout; showing auth overlay fallback.');
+            setBootStatus('Initialization timeout. Please sign in again.');
+            const loader = document.getElementById('boot-loader');
+            if (loader) loader.classList.add('loaded');
+            document.getElementById('authOverlay').classList.remove('hidden-force');
+            document.getElementById('appHeader').classList.add('hidden-force');
+            document.getElementById('main-content').classList.add('hidden-force');
+            document.getElementById('appNav').classList.add('hidden-force');
+            isAuthResolved = true;
+        }, 7000);
 
         // --- Sync Logic ---
         function setupRealtimeListeners() {
