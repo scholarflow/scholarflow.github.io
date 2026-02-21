@@ -128,7 +128,6 @@
             background: var(--md-sys-color-surface); z-index: 100;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             transition: opacity 0.5s ease-out, visibility 0.5s;
-            animation: bootFailsafeHide 0s linear 15s forwards;
         }
         #boot-loader.loaded {
             opacity: 0;
@@ -143,7 +142,6 @@
             animation: bootSpin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
         @keyframes bootSpin { to { transform: rotate(360deg); } }
-        @keyframes bootFailsafeHide { to { opacity: 0; visibility: hidden; pointer-events: none; } }
 
         /* Segmented Control */
         .segmented-control {
@@ -380,7 +378,7 @@
     </div>
 
     <!-- Auth UI Layer -->
-    <div id="authOverlay" class="overlay">
+    <div id="authOverlay" class="overlay hidden-force">
         <div class="max-w-xs w-full text-center space-y-8">
             <div class="space-y-2">
                 <span class="text-5xl text-blue-400">●</span>
@@ -832,10 +830,6 @@
             <div class="pill">📝</div>
             <span class="text-[11px] font-medium">Notes</span>
         </a>
-        <a href="#focus" class="nav-item flex flex-col items-center gap-1 shrink-0 min-w-[64px]">
-            <div class="pill">🎯</div>
-            <span class="text-[11px] font-medium">Focus</span>
-        </a>
         <a href="#profile" class="nav-item flex flex-col items-center gap-1 shrink-0 min-w-[64px]">
             <div class="pill">👤</div>
             <span class="text-[11px] font-medium">Profile</span>
@@ -853,87 +847,6 @@
             <span class="text-[11px] font-medium">Admin</span>
         </a>
     </nav>
-
-    <script>
-        // Global bootstrap watchdog: must work even if module imports fail early.
-        (function () {
-            var FALLBACK_TIMEOUT_MS = 12000;
-            var startedAt = Date.now();
-
-            window.__scholarflowBootResolved = false;
-            window.__scholarflowModuleStarted = false;
-
-            window.__markBootResolved = function () {
-                window.__scholarflowBootResolved = true;
-            };
-
-            window.__forceBootFallback = function (statusMessage) {
-                if (window.__scholarflowBootResolved) return;
-
-                try {
-                    var loader = document.getElementById('boot-loader');
-                    if (loader) {
-                        loader.classList.add('loaded');
-                        loader.style.opacity = '0';
-                        loader.style.visibility = 'hidden';
-                        loader.style.pointerEvents = 'none';
-                        setTimeout(function () { loader.style.display = 'none'; }, 600);
-                    }
-
-                    var status = document.getElementById('boot-status');
-                    if (status) status.innerText = statusMessage || 'Initialization timeout. Please sign in again.';
-
-                    var authOverlay = document.getElementById('authOverlay');
-                    var appHeader = document.getElementById('appHeader');
-                    var mainContent = document.getElementById('main-content');
-                    var appNav = document.getElementById('appNav');
-
-                    if (authOverlay) authOverlay.classList.remove('hidden-force');
-                    if (appHeader) appHeader.classList.add('hidden-force');
-                    if (mainContent) mainContent.classList.add('hidden-force');
-                    if (appNav) appNav.classList.add('hidden-force');
-                } catch (e) {
-                    console.error('Boot fallback failed', e);
-                }
-
-                window.__markBootResolved();
-            };
-
-            var watchdogId = setInterval(function () {
-                if (window.__scholarflowBootResolved) {
-                    clearInterval(watchdogId);
-                    return;
-                }
-
-                if (Date.now() - startedAt >= FALLBACK_TIMEOUT_MS) {
-                    if (!window.__scholarflowModuleStarted) {
-                        console.error('Firebase module did not initialize; forcing boot fallback.');
-                    } else {
-                        console.warn('Auth startup timed out; forcing boot fallback.');
-                    }
-                    window.__forceBootFallback('Initialization timeout. Please sign in again.');
-                    clearInterval(watchdogId);
-                }
-            }, 250);
-
-            window.addEventListener('error', function () {
-                if (!window.__scholarflowBootResolved) {
-                    setTimeout(function () {
-                        window.__forceBootFallback('Initialization error. Please sign in again.');
-                    }, 0);
-                }
-            });
-
-            window.addEventListener('unhandledrejection', function () {
-                if (!window.__scholarflowBootResolved) {
-                    setTimeout(function () {
-                        window.__forceBootFallback('Initialization error. Please sign in again.');
-                    }, 0);
-                }
-            });
-        })();
-    </script>
-
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -962,8 +875,6 @@
         // Initialize Vertex AI
         const vertexAI = getVertexAI(app);
         const model = getGenerativeModel(vertexAI, { model: "gemini-2.5-flash" });
-
-        window.__scholarflowModuleStarted = true;
 
         let currentUser = null;
         let currentUserProfile = null; // Store fetched profile data
@@ -1219,8 +1130,7 @@
         onAuthStateChanged(auth, async (user) => {
             setBootStatus("Checking credentials...");
             
-            try {
-                if (user) {
+            if (user) {
                 currentUser = user;
                 
                 // Fetch Profile Logic
@@ -1261,51 +1171,27 @@
                     window.closeAccountStatusModal();
                 }
                 
-                } else {
-                    currentUser = null;
-                    currentUserProfile = null;
-                    currentUserIsAdmin = false;
-                    currentAccountStatus = null;
-                    blockedUsers = {};
-                    usersBlockingMe = {};
-                    renderBlockedUsersList();
-                    window.closeAccountStatusModal();
-                    // Show Auth UI (Hidden behind loader initially)
-                    document.getElementById('authOverlay').classList.remove('hidden-force');
-                    document.getElementById('appHeader').classList.add('hidden-force');
-                    document.getElementById('main-content').classList.add('hidden-force');
-                    document.getElementById('appNav').classList.add('hidden-force');
-                }
-            } catch (e) {
-                console.error('Auth initialization failed', e);
-                setBootStatus('Initialization failed. Please refresh.');
+            } else {
+                currentUser = null;
+                currentUserProfile = null;
+                currentUserIsAdmin = false;
+                currentAccountStatus = null;
+                blockedUsers = {};
+                usersBlockingMe = {};
+                renderBlockedUsersList();
+                window.closeAccountStatusModal();
+                // Show Auth UI (Hidden behind loader initially)
                 document.getElementById('authOverlay').classList.remove('hidden-force');
                 document.getElementById('appHeader').classList.add('hidden-force');
                 document.getElementById('main-content').classList.add('hidden-force');
                 document.getElementById('appNav').classList.add('hidden-force');
-            } finally {
-                // Reveal UI
-                const loader = document.getElementById('boot-loader');
-                if (loader) loader.classList.add('loaded');
-                isAuthResolved = true;
-                window.__markBootResolved();
             }
-        });
 
-        // Fallback: prevent indefinite boot-loader lock if auth init hangs unexpectedly
-        setTimeout(() => {
-            if (isAuthResolved) return;
-            console.warn('Auth initialization timeout; showing auth overlay fallback.');
-            setBootStatus('Initialization timeout. Please sign in again.');
+            // Reveal UI
             const loader = document.getElementById('boot-loader');
-            if (loader) loader.classList.add('loaded');
-            document.getElementById('authOverlay').classList.remove('hidden-force');
-            document.getElementById('appHeader').classList.add('hidden-force');
-            document.getElementById('main-content').classList.add('hidden-force');
-            document.getElementById('appNav').classList.add('hidden-force');
+            loader.classList.add('loaded');
             isAuthResolved = true;
-            window.__markBootResolved();
-        }, 7000);
+        });
 
         // --- Sync Logic ---
         function setupRealtimeListeners() {
@@ -1465,14 +1351,6 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
 
                     const profileData = profileDoc.data();
 
-                    currentViewedProfileMenuData = {
-                        uid: targetUid,
-                        username: profileData.username,
-                        displayName: profileData.displayName,
-                        bio: profileData.bio || ''
-                    };
-                    actionsBtn.classList.remove('hidden-force');
-
                     // Privacy Check
                     if (profileData.hidden && targetUid !== currentUser?.uid) {
                         container.innerHTML = `
@@ -1527,15 +1405,6 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                     // Render Public View
                     container.innerHTML = `
                          <div class="material-card relative overflow-hidden">
-                            <div class="profile-menu">
-                                <button onclick="toggleProfileMenu()" class="w-9 h-9 rounded-full bg-black/30 hover:bg-black/50 transition-colors">⋮</button>
-                                <div id="profile-menu-dropdown" class="profile-menu-dropdown">
-                                    <button onclick="reportProfileFromMenu('${targetUid}', ${JSON.stringify(profileData.displayName || '')}, ${JSON.stringify(profileData.bio || '')})">Report</button>
-                                    <button onclick="copyProfileUsername('${profileData.username}')">Copy Username</button>
-                                    <button onclick="copyProfileUid('${targetUid}')">Copy User ID</button>
-                                    <button onclick="copyProfileLink('${profileData.username}')">Copy Link</button>
-                                </div>
-                            </div>
                             <div class="profile-header-bg"></div>
                             <div class="profile-avatar-xl">
                                 ${profileData.photoURL ? `<img src="${profileData.photoURL}" alt="avatar">` : (profileData.displayName || '?')[0]}
@@ -2391,8 +2260,17 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                  }
 
                  // Delete removed attachments from Storage as part of the save flow
+                 const deleteRefForAttachment = (att) => {
+                     if (att.storagePath) return ref(storage, att.storagePath);
+                     if (att.url) return ref(storage, att.url);
+                     return null;
+                 };
+
                  const deletionResults = await Promise.allSettled(
-                     getAttachmentStorageRefs(deletedAttachments).map(fileRef => deleteObject(fileRef))
+                     deletedAttachments
+                         .map(deleteRefForAttachment)
+                         .filter(Boolean)
+                         .map(fileRef => deleteObject(fileRef))
                  );
 
                  const failedDeletions = deletionResults.filter(r => r.status === 'rejected');
@@ -2411,60 +2289,19 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
              }
         };
 
-        const extractStoragePathFromUrl = (rawUrl) => {
-            if (!rawUrl || typeof rawUrl !== 'string') return null;
-
-            try {
-                if (rawUrl.startsWith('gs://')) {
-                    const [, , , ...pathParts] = rawUrl.split('/');
-                    return pathParts.join('/');
-                }
-
-                const parsed = new URL(rawUrl);
-                const marker = '/o/';
-                if (!parsed.pathname.includes(marker)) return null;
-
-                const encodedPath = parsed.pathname.split(marker)[1];
-                if (!encodedPath) return null;
-
-                return decodeURIComponent(encodedPath);
-            } catch (_) {
-                return null;
-            }
-        };
-
-        const getAttachmentStorageRefs = (attachments = []) => {
-            const refs = [];
-            const seen = new Set();
-
-            const pushRef = (value) => {
-                if (!value) return;
-                try {
-                    const fileRef = ref(storage, value);
-                    if (seen.has(fileRef.fullPath)) return;
-                    seen.add(fileRef.fullPath);
-                    refs.push(fileRef);
-                } catch (_) {
-                    // Ignore malformed storage ref values.
-                }
-            };
-
-            attachments.forEach(att => {
-                if (!att) return;
-                pushRef(att.storagePath);
-                pushRef(att.url);
-                pushRef(extractStoragePathFromUrl(att.url));
-            });
-
-            return refs;
-        };
-
         // --- Delete/Update Actions ---
         window.deleteNote = async (id) => {
             const note = notes.find(n => n.id === id);
             if (!note) return;
 
-            const toDeleteRefs = getAttachmentStorageRefs(note.attachments || []);
+            const attachments = note.attachments || [];
+            const toDeleteRefs = attachments.map(att => {
+                if (att.storagePath) return ref(storage, att.storagePath);
+                if (att.url) {
+                    try { return ref(storage, att.url); } catch (_) { return null; }
+                }
+                return null;
+            }).filter(Boolean);
 
             try {
                 if (note.shared) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', id));
