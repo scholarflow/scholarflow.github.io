@@ -671,6 +671,7 @@
                              <button onclick="copyCurrentViewedProfileUsername()">Copy Username</button>
                              <button onclick="copyCurrentViewedProfileUid()">Copy User ID</button>
                              <button onclick="copyCurrentViewedProfileLink()">Copy Link</button>
+                             <button id="profile-block-user-btn" onclick="toggleBlockCurrentViewedProfile()">Block User</button>
                          </div>
                      </div>
                      <button onclick="location.hash='#profiles/search'" class="ripple p-2 rounded-full bg-zinc-800 text-blue-400">
@@ -742,6 +743,12 @@
                     </div>
                 </div>
 
+
+                <div class="material-card">
+                    <p class="font-medium">Blocked Users</p>
+                    <p class="text-xs opacity-60 mt-1">People you block cannot interact with your content, and their content is hidden from you.</p>
+                    <div id="blocked-users-list" class="mt-4 space-y-2"></div>
+                </div>
 
                 <div class="material-card border border-red-500/20">
                     <p class="font-medium text-red-300">Delete Profile</p>
@@ -897,6 +904,8 @@
         let adminSharedNotes = [];
         let currentAccountStatus = null; // null | { type: 'suspended' | 'banned', message: string }
         let currentViewedNoteMenuData = null; // { id, text, isOwner, isPublic, date, authorName, authorUsername, commentsLocked, commentsDisabled }
+        let blockedUsers = {}; // uid -> { docId, uid, username, displayName, photoURL }
+        let usersBlockingMe = {}; // uid -> true
 
         // Update Loader Message Helper
         const setBootStatus = (msg) => {
@@ -904,6 +913,78 @@
             if (el) el.innerText = msg;
         };
 
+        const blockDocId = (blockerUid, blockedUid) => `${blockerUid}__${blockedUid}`;
+        const isUserContentBlocked = (uid) => !!uid && (!!blockedUsers[uid] || !!usersBlockingMe[uid]);
+
+        function renderBlockedUsersList() {
+            const container = document.getElementById('blocked-users-list');
+            if (!container) return;
+            const entries = Object.values(blockedUsers || {});
+            if (entries.length === 0) {
+                container.innerHTML = '<div class="text-xs opacity-60">No blocked users.</div>';
+                return;
+            }
+            container.innerHTML = entries.map(u => `
+                <div class="flex items-center justify-between gap-2 bg-black/10 rounded-xl px-3 py-2">
+                    <div>
+                        <div class="text-sm font-medium">${u.displayName || u.username || u.uid}</div>
+                        <div class="text-xs opacity-60">@${u.username || 'unknown'}</div>
+                    </div>
+                    <button onclick="unblockUser('${u.uid}')" class="text-xs px-3 py-1 rounded-full bg-zinc-800 ripple">Unblock</button>
+                </div>
+            `).join('');
+        }
+
+        function refreshProfileBlockMenuOption() {
+            const btn = document.getElementById('profile-block-user-btn');
+            if (!btn) return;
+            if (!currentViewedProfileMenuData?.uid || currentViewedProfileMenuData.uid === currentUser?.uid) {
+                btn.classList.add('hidden-force');
+                return;
+            }
+            btn.classList.remove('hidden-force');
+            btn.innerText = blockedUsers[currentViewedProfileMenuData.uid] ? 'Unblock User' : 'Block User';
+        }
+
+        window.unblockUser = async (uid) => {
+            if (!currentUser || !uid) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'blocks', blockDocId(currentUser.uid, uid)));
+                if (currentViewedProfileMenuData?.uid === uid) refreshProfileBlockMenuOption();
+            } catch (e) {
+                console.error(e);
+                alert('Could not unblock user.');
+            }
+        };
+
+        window.toggleBlockCurrentViewedProfile = async () => {
+            const target = currentViewedProfileMenuData;
+            if (!currentUser || !target?.uid || target.uid === currentUser.uid) return;
+
+            const alreadyBlocked = !!blockedUsers[target.uid];
+            try {
+                if (alreadyBlocked) {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'blocks', blockDocId(currentUser.uid, target.uid)));
+                    alert('User unblocked.');
+                } else {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'blocks', blockDocId(currentUser.uid, target.uid)), {
+                        blockerUid: currentUser.uid,
+                        blockedUid: target.uid,
+                        username: target.username || '',
+                        displayName: target.displayName || '',
+                        photoURL: target.photoURL || '',
+                        timestamp: Date.now()
+                    });
+                    alert('User blocked. You will no longer see each other's content.');
+                    location.hash = '#profile';
+                }
+                closeProfileActionsMenu();
+                refreshProfileBlockMenuOption();
+            } catch (e) {
+                console.error(e);
+                alert('Could not update block status.');
+            }
+        };
 
         async function refreshAdminStatus() {
             if (!currentUser) {
@@ -1095,6 +1176,9 @@
                 currentUserProfile = null;
                 currentUserIsAdmin = false;
                 currentAccountStatus = null;
+                blockedUsers = {};
+                usersBlockingMe = {};
+                renderBlockedUsersList();
                 window.closeAccountStatusModal();
                 // Show Auth UI (Hidden behind loader initially)
                 document.getElementById('authOverlay').classList.remove('hidden-force');
@@ -1135,6 +1219,28 @@
             onSnapshot(collection(db, ...userPath, 'todos'), (snap) => {
                 todos = snap.docs.map(d => ({id: d.id, ...d.data()}));
                 renderTodos();
+            }, err => console.error(err));
+
+            // Blocking (outgoing)
+            onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'blocks'), where('blockerUid', '==', currentUser.uid)), (snap) => {
+                blockedUsers = {};
+                snap.docs.forEach(d => {
+                    const data = d.data() || {};
+                    if (data.blockedUid) blockedUsers[data.blockedUid] = { docId: d.id, ...data };
+                });
+                renderBlockedUsersList();
+                refreshProfileBlockMenuOption();
+                if (noteViewMode === 'public') renderNotes();
+            }, err => console.error(err));
+
+            // Blocking (incoming)
+            onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'blocks'), where('blockedUid', '==', currentUser.uid)), (snap) => {
+                usersBlockingMe = {};
+                snap.docs.forEach(d => {
+                    const data = d.data() || {};
+                    if (data.blockerUid) usersBlockingMe[data.blockerUid] = true;
+                });
+                if (noteViewMode === 'public') renderNotes();
             }, err => console.error(err));
         }
 
@@ -1265,6 +1371,11 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                         return;
                     }
 
+                    if (isUserContentBlocked(targetUid)) {
+                        container.innerHTML = `<div class="material-card text-center p-8"><div class="text-3xl mb-3">🚫</div><h3 class="text-xl font-medium">Profile Unavailable</h3><p class="opacity-60 mt-2 text-sm">You cannot view this profile due to a block.</p></div>`;
+                        return;
+                    }
+
                     // Setup active report data for profile
                     activeReport = { 
                         type: 'profile', 
@@ -1293,9 +1404,11 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                         uid: targetUid,
                         username: profileData.username,
                         displayName: profileData.displayName,
-                        bio: profileData.bio || ''
+                        bio: profileData.bio || '',
+                        photoURL: profileData.photoURL || ''
                     };
                     actionsBtn.classList.remove('hidden-force');
+                    refreshProfileBlockMenuOption();
 
                     // Render Public View
                     container.innerHTML = `
@@ -1658,7 +1771,7 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
 
                 resContainer.innerHTML = snap.docs.map(d => {
                     const data = d.data();
-                    if (data.hidden || data.flagged) return ''; // Skip hidden or flagged in search
+                    if (data.hidden || data.flagged || isUserContentBlocked(d.id)) return ''; // Skip hidden, flagged, or blocked users in search
                     return `
                         <div onclick="location.hash='#profiles/@${data.username}'" class="flex items-center gap-3 p-3 bg-zinc-800 rounded-xl cursor-pointer ripple">
                             <div class="w-10 h-10 rounded-full bg-zinc-600 overflow-hidden flex items-center justify-center">
@@ -1826,7 +1939,7 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
             container.innerHTML = "";
             
             // Separate parents and replies
-            const visibleComments = currentNoteComments.filter(c => !c.hidden);
+            const visibleComments = currentNoteComments.filter(c => !c.hidden && !isUserContentBlocked(c.authorId));
             const parents = visibleComments.filter(c => !c.parentId);
             const replies = visibleComments.filter(c => c.parentId);
 
@@ -2197,8 +2310,32 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
         window.deleteNote = async (id) => {
             const note = notes.find(n => n.id === id);
             if (!note) return;
-            if (note.shared) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', id));
-            await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', id));
+
+            const attachments = note.attachments || [];
+            const toDeleteRefs = attachments.map(att => {
+                if (att.storagePath) return ref(storage, att.storagePath);
+                if (att.url) {
+                    try { return ref(storage, att.url); } catch (_) { return null; }
+                }
+                return null;
+            }).filter(Boolean);
+
+            try {
+                if (note.shared) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', id));
+                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', id));
+
+                if (toDeleteRefs.length > 0) {
+                    const results = await Promise.allSettled(toDeleteRefs.map(fileRef => deleteObject(fileRef)));
+                    const failed = results.filter(r => r.status === 'rejected');
+                    if (failed.length > 0) {
+                        console.warn(`${failed.length} attachment file(s) could not be removed from storage.`);
+                        alert(`Note deleted, but ${failed.length} attachment file(s) could not be removed from storage.`);
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Could not delete note. Please try again.');
+            }
         };
 
         // --- Sharing Logic with Profile Link Support ---
@@ -2276,7 +2413,7 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
         // --- Rendering ---
         window.renderNotes = () => {
             const container = document.getElementById('notesContainer');
-            const list = noteViewMode === 'private' ? notes : sharedNotes.filter(n => !n.hidden);
+            const list = noteViewMode === 'private' ? notes : sharedNotes.filter(n => !n.hidden && !isUserContentBlocked(n.authorId));
             
             if (list.length === 0) {
                 container.innerHTML = `<div class="p-8 text-center opacity-40">No ${noteViewMode === 'private' ? 'private' : 'community'} notes found.</div>`;
@@ -2808,6 +2945,25 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
             if(!note) { if (isAuthResolved) location.hash = '#notes'; return; }
             
             const contentDiv = document.getElementById('note-detail-content');
+
+            if (isUserContentBlocked(note.authorId)) {
+                contentDiv.innerHTML = `
+                    <div class="flagged-overlay">
+                        <div class="text-4xl">🚫</div>
+                        <div class="flagged-title">Content Unavailable</div>
+                        <p class="text-sm opacity-90">You cannot view this content due to a block.</p>
+                    </div>
+                `;
+                document.getElementById('note-detail-author').classList.add('hidden-force');
+                document.getElementById('comments-section').classList.add('hidden-force');
+                document.getElementById('note-actions-btn').classList.add('hidden-force');
+                document.getElementById('edit-note-btn').classList.add('hidden-force');
+                document.getElementById('share-note-btn').classList.add('hidden-force');
+                document.getElementById('shared-badge').classList.add('hidden-force');
+                renderAttachments({ attachments: [] });
+                document.getElementById('note-detail-date').innerText = `Shared on: ${note.date}`;
+                return;
+            }
             
             // Check Moderation Hidden/Flagged Status for Viewer
             if (note.hidden) {

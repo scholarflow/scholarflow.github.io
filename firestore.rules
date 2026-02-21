@@ -78,6 +78,24 @@ service cloud.firestore {
     // 3. Public Data
     // -----------------------------------------------------------------
 
+    // --- A. Blocking Relations (Public metadata for client-side visibility filtering) ---
+    match /artifacts/{appId}/public/data/blocks/{blockId} {
+      allow read: if isSignedIn() && !isBanned(appId);
+
+      allow create: if isSignedIn()
+                    && !isBanned(appId)
+                    && !isSuspended(appId)
+                    && request.resource.data.blockerUid == request.auth.uid
+                    && request.resource.data.blockedUid is string
+                    && request.resource.data.blockedUid != request.auth.uid;
+
+      allow delete: if isSignedIn()
+                    && !isBanned(appId)
+                    && resource.data.blockerUid == request.auth.uid;
+
+      allow update: if false;
+    }
+
     // --- A. Profiles ---
     match /artifacts/{appId}/public/data/profiles/{userId} {
       allow read: if isSignedIn() && !isBanned(appId);
