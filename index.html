@@ -671,6 +671,7 @@
                              <button onclick="copyCurrentViewedProfileUsername()">Copy Username</button>
                              <button onclick="copyCurrentViewedProfileUid()">Copy User ID</button>
                              <button onclick="copyCurrentViewedProfileLink()">Copy Link</button>
+                             <button id="profile-block-btn" onclick="toggleCurrentViewedProfileBlock()">Block User</button>
                          </div>
                      </div>
                      <button onclick="location.hash='#profiles/search'" class="ripple p-2 rounded-full bg-zinc-800 text-blue-400">
@@ -1095,6 +1096,7 @@
                 currentUserProfile = null;
                 currentUserIsAdmin = false;
                 currentAccountStatus = null;
+                blockedUserIds = new Set();
                 window.closeAccountStatusModal();
                 // Show Auth UI (Hidden behind loader initially)
                 document.getElementById('authOverlay').classList.remove('hidden-force');
@@ -1131,6 +1133,13 @@
                 if(location.hash.includes('public')) handleRouting();
             }, err => console.error(err));
 
+            // Blocked users
+            onSnapshot(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'blocked_users'), (snap) => {
+                blockedUserIds = new Set(snap.docs.map(d => d.id));
+                if (noteViewMode === 'public') renderNotes();
+                if (location.hash.startsWith('#profiles/@') || location.hash.includes('/public')) handleRouting();
+            }, err => console.error(err));
+
             // Todos
             onSnapshot(collection(db, ...userPath, 'todos'), (snap) => {
                 todos = snap.docs.map(d => ({id: d.id, ...d.data()}));
@@ -1141,10 +1150,23 @@
 
         // --- Profile Management ---
         let currentViewedProfileMenuData = null; // { uid, username, displayName, bio }
+        let blockedUserIds = new Set();
+
+        const isUserBlocked = (uid) => !!uid && blockedUserIds.has(uid);
+
+        function refreshProfileActionsMenuState() {
+            const blockBtn = document.getElementById('profile-block-btn');
+            if (!blockBtn) return;
+            const canBlock = !!currentViewedProfileMenuData?.uid && currentViewedProfileMenuData.uid !== currentUser?.uid;
+            blockBtn.style.display = canBlock ? 'block' : 'none';
+            if (!canBlock) return;
+            blockBtn.innerText = isUserBlocked(currentViewedProfileMenuData.uid) ? 'Unblock User' : 'Block User';
+        }
 
         window.toggleProfileActionsMenu = () => {
             const menu = document.getElementById('profile-actions-dropdown');
             if (!menu) return;
+            refreshProfileActionsMenuState();
             menu.classList.toggle('active');
         };
 
@@ -1184,6 +1206,37 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
             };
             closeProfileActionsMenu();
             document.getElementById('reportModal').classList.add('active');
+        };
+
+        window.toggleCurrentViewedProfileBlock = async () => {
+            const targetUid = currentViewedProfileMenuData?.uid;
+            if (!targetUid || targetUid === currentUser?.uid) return;
+
+            const currentlyBlocked = isUserBlocked(targetUid);
+            const actionLabel = currentlyBlocked ? 'unblock' : 'block';
+            if (!confirm(`Are you sure you want to ${actionLabel} this user?`)) return;
+
+            try {
+                const blockRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'blocked_users', targetUid);
+                if (currentlyBlocked) {
+                    await deleteDoc(blockRef);
+                    blockedUserIds.delete(targetUid);
+                } else {
+                    await setDoc(blockRef, {
+                        createdAt: Date.now()
+                    });
+                    blockedUserIds.add(targetUid);
+                }
+                refreshProfileActionsMenuState();
+                closeProfileActionsMenu();
+                renderNotes();
+                if (location.hash.includes('/public')) {
+                    handleRouting();
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Could not update block list. Please try again.');
+            }
         };
 
         window.renderProfileUI = async (targetUsername = null) => {
@@ -1252,6 +1305,18 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                         bio: profileData.bio || ''
                     };
                     actionsBtn.classList.remove('hidden-force');
+                    refreshProfileActionsMenuState();
+
+                    if (isUserBlocked(targetUid)) {
+                        container.innerHTML = `
+                             <div class="material-card text-center p-8">
+                                <div class="text-4xl mb-4">🚫</div>
+                                <h3 class="text-xl font-medium">User Blocked</h3>
+                                <p class="opacity-50 mt-2 text-sm">You have blocked this user. Unblock them from the profile menu to view this profile.</p>
+                             </div>
+                        `;
+                        return;
+                    }
 
                     // Privacy Check
                     if (profileData.hidden && targetUid !== currentUser?.uid) {
@@ -1658,7 +1723,7 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
 
                 resContainer.innerHTML = snap.docs.map(d => {
                     const data = d.data();
-                    if (data.hidden || data.flagged) return ''; // Skip hidden or flagged in search
+                    if (data.hidden || data.flagged || isUserBlocked(d.id)) return ''; // Skip hidden/flagged/blocked in search
                     return `
                         <div onclick="location.hash='#profiles/@${data.username}'" class="flex items-center gap-3 p-3 bg-zinc-800 rounded-xl cursor-pointer ripple">
                             <div class="w-10 h-10 rounded-full bg-zinc-600 overflow-hidden flex items-center justify-center">
@@ -1782,7 +1847,9 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
             const commentsPath = collection(db, 'artifacts', appId, 'public', 'data', 'shared_notes', noteId, 'comments');
             
             unsubscribeComments = onSnapshot(commentsPath, async (snap) => {
-                currentNoteComments = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                currentNoteComments = snap.docs
+                    .map(d => ({id: d.id, ...d.data()}))
+                    .filter(comment => !isUserBlocked(comment.authorId));
                 // Sort by time
                 currentNoteComments.sort((a,b) => a.timestamp - b.timestamp);
                 await hydrateCommentAuthorsFromProfiles();
@@ -2197,8 +2264,31 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
         window.deleteNote = async (id) => {
             const note = notes.find(n => n.id === id);
             if (!note) return;
-            if (note.shared) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', id));
-            await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', id));
+
+            try {
+                const attachments = note.attachments || [];
+                const deletionResults = await Promise.allSettled(
+                    attachments
+                        .map(att => {
+                            if (att.storagePath) return ref(storage, att.storagePath);
+                            if (att.url) return ref(storage, att.url);
+                            return null;
+                        })
+                        .filter(Boolean)
+                        .map(fileRef => deleteObject(fileRef))
+                );
+
+                const failedDeletions = deletionResults.filter(r => r.status === 'rejected');
+                if (failedDeletions.length > 0) {
+                    throw new Error(`${failedDeletions.length} attachment file(s) failed to delete from storage.`);
+                }
+
+                if (note.shared) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shared_notes', id));
+                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', id));
+            } catch (e) {
+                console.error(e);
+                alert("Delete failed");
+            }
         };
 
         // --- Sharing Logic with Profile Link Support ---
@@ -2276,7 +2366,7 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
         // --- Rendering ---
         window.renderNotes = () => {
             const container = document.getElementById('notesContainer');
-            const list = noteViewMode === 'private' ? notes : sharedNotes.filter(n => !n.hidden);
+            const list = noteViewMode === 'private' ? notes : sharedNotes.filter(n => !n.hidden && !isUserBlocked(n.authorId));
             
             if (list.length === 0) {
                 container.innerHTML = `<div class="p-8 text-center opacity-40">No ${noteViewMode === 'private' ? 'private' : 'community'} notes found.</div>`;
@@ -2806,6 +2896,25 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
         async function renderPublicNoteDetail(id) {
             const note = sharedNotes.find(n => n.id === id);
             if(!note) { if (isAuthResolved) location.hash = '#notes'; return; }
+            if (isUserBlocked(note.authorId)) {
+                const contentDiv = document.getElementById('note-detail-content');
+                contentDiv.innerHTML = `
+                    <div class="material-card text-center p-8">
+                        <div class="text-4xl mb-3">🚫</div>
+                        <h3 class="text-lg font-medium">Note unavailable</h3>
+                        <p class="opacity-60 text-sm mt-2">You blocked this author, so their shared note is hidden.</p>
+                    </div>
+                `;
+                document.getElementById('note-detail-date').innerText = '';
+                document.getElementById('note-detail-author').classList.add('hidden-force');
+                document.getElementById('edit-note-btn').classList.add('hidden-force');
+                document.getElementById('share-note-btn').classList.add('hidden-force');
+                document.getElementById('shared-badge').classList.add('hidden-force');
+                document.getElementById('comments-section').classList.add('hidden-force');
+                document.getElementById('note-actions-btn').classList.add('hidden-force');
+                document.getElementById('note-detail').classList.add('active');
+                return;
+            }
             
             const contentDiv = document.getElementById('note-detail-content');
             
