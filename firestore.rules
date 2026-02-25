@@ -26,6 +26,12 @@ service cloud.firestore {
              && get(/databases/$(database)/documents/artifacts/$(appId)/moderation/main/suspended_users/$(request.auth.uid)).data.until > request.time;
     }
 
+    // True when the target user has blocked the requester.
+    function isBlockedBy(targetUserId, appId) {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/artifacts/$(appId)/users/$(targetUserId)/blocked_users/$(request.auth.uid));
+    }
+
     // Check if request.auth.uid owns a resource with authorId or uid.
     function isOwner(resourceData) {
       return isSignedIn() && (resourceData.authorId == request.auth.uid || resourceData.uid == request.auth.uid);
@@ -80,7 +86,9 @@ service cloud.firestore {
 
     // --- A. Profiles ---
     match /artifacts/{appId}/public/data/profiles/{userId} {
-      allow read: if isSignedIn() && !isBanned(appId);
+      allow read: if isSignedIn()
+                  && !isBanned(appId)
+                  && (request.auth.uid == userId || !isBlockedBy(userId, appId));
 
       allow create: if isSignedIn()
                    && request.auth.uid == userId
@@ -92,6 +100,7 @@ service cloud.firestore {
                      isSignedIn()
                      && !isBanned(appId)
                      && !isSuspended(appId)
+                     && !isBlockedBy(userId, appId)
                      && (
                         request.auth.uid == userId
                         || isFlaggingAction()
@@ -130,7 +139,9 @@ service cloud.firestore {
     // --- C. Shared Notes ---
     match /artifacts/{appId}/public/data/shared_notes/{noteId} {
 
-      allow read: if isSignedIn() && !isBanned(appId);
+      allow read: if isSignedIn()
+                  && !isBanned(appId)
+                  && (!('authorId' in resource.data) || !isBlockedBy(resource.data.authorId, appId));
 
       allow create: if isSignedIn()
                     && !isBanned(appId)
@@ -142,6 +153,7 @@ service cloud.firestore {
                       isSignedIn()
                       && !isBanned(appId)
                       && !isSuspended(appId)
+                      && !isBlockedBy(resource.data.authorId, appId)
                       && (
                         (isOwner(resource.data) && preservesOwnership())
                         || isFlaggingAction()
@@ -160,12 +172,16 @@ service cloud.firestore {
       // Comments Sub-collection
       match /comments/{commentId} {
 
-        allow read: if isSignedIn() && !isBanned(appId);
+        allow read: if isSignedIn()
+                    && !isBanned(appId)
+                    && !isBlockedBy(get(/databases/$(database)/documents/artifacts/$(appId)/public/data/shared_notes/$(noteId)).data.authorId, appId)
+                    && (!('authorId' in resource.data) || !isBlockedBy(resource.data.authorId, appId));
 
         allow create: if isSignedIn()
                       && !isBanned(appId)
                       && !isSuspended(appId)
-                      && request.resource.data.authorId == request.auth.uid;
+                      && request.resource.data.authorId == request.auth.uid
+                      && !isBlockedBy(get(/databases/$(database)/documents/artifacts/$(appId)/public/data/shared_notes/$(noteId)).data.authorId, appId);
 
         // Owner can edit own comment; community can report; admin can update/moderate.
         allow update: if isAdmin(appId)
@@ -173,6 +189,8 @@ service cloud.firestore {
                         isSignedIn()
                         && !isBanned(appId)
                         && !isSuspended(appId)
+                        && !isBlockedBy(get(/databases/$(database)/documents/artifacts/$(appId)/public/data/shared_notes/$(noteId)).data.authorId, appId)
+                        && !isBlockedBy(resource.data.authorId, appId)
                         && (
                           (isOwner(resource.data) && preservesOwnership())
                           || isFlaggingAction()
@@ -185,6 +203,7 @@ service cloud.firestore {
                         isSignedIn()
                         && !isBanned(appId)
                         && !isSuspended(appId)
+                        && !isBlockedBy(get(/databases/$(database)/documents/artifacts/$(appId)/public/data/shared_notes/$(noteId)).data.authorId, appId)
                         && (
                           isOwner(resource.data)
                           || get(/databases/$(database)/documents/artifacts/$(appId)/public/data/shared_notes/$(noteId)).data.authorId == request.auth.uid

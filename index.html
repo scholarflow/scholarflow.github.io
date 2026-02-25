@@ -1919,6 +1919,13 @@ Bio: ${currentViewedProfileMenuData.bio || ''}`
                 await hydrateCommentAuthorsFromProfiles();
                 renderComments();
                 document.getElementById('comment-count').innerText = currentNoteComments.length;
+            }, (err) => {
+                console.error(err);
+                currentNoteComments = [];
+                const container = document.getElementById('comments-list');
+                if (container) container.innerHTML = '<div class="text-center text-xs opacity-50 py-8">Comments unavailable.</div>';
+                const inputContainer = document.getElementById('comment-input-container');
+                if (inputContainer) inputContainer.classList.add('hidden-force');
             });
         }
 
